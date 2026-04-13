@@ -1,0 +1,40 @@
+# OS fine-tuned files
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+.pytest_cache/
+
+# Node (Frontend)
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+
+# ML Data & Models
+data/raw/
+data/processed/
+data/database/*.db
+models/caches/
+uploads/
+
+# Large Files
+*.pt
+*.h5
+*.pkl
+*.bin
+
+# Logs & Reports
+logs/
+reports/*.json
+reports/*.csv
+scripts/debug/
+
+# IDEs
+.vscode/
+.idea/
