@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import { ShieldCheck, ArrowUpRight } from 'lucide-react';
 
 export default function Footer() {
@@ -9,10 +10,14 @@ export default function Footer() {
           {/* Brand Column */}
           <div className="col-span-1 md:col-span-1 space-y-6">
             <div className="flex items-center gap-2 text-white">
-              <div className="bg-blue-600 p-1.5 rounded-lg">
-                <ShieldCheck className="w-5 h-5 text-white" />
-              </div>
-              <span className="font-bold text-xl tracking-tight">Jotex <span className="text-blue-500">AI</span></span>
+              <Image 
+                src="/logo.png" 
+                alt="Veridex Logo" 
+                width={28} 
+                height={28} 
+                className="w-7 h-7 object-contain"
+              />
+              <span className="font-bold text-xl tracking-tight">Veri<span className="text-blue-500">dex</span></span>
             </div>
             <p className="text-sm leading-relaxed font-medium max-w-xs">
               Industrial-grade document forensic and biometric verification solutions for high-growth modern enterprises.
@@ -40,7 +45,7 @@ export default function Footer() {
         </div>
 
         <div className="pt-8 border-t border-slate-900 flex flex-col md:flex-row justify-between items-center gap-6 text-[10px] font-bold uppercase tracking-widest opacity-50">
-          <p>© 2026 Jotex AI Labs. All rights reserved.</p>
+          <p>© 2026 Veridex Labs. All rights reserved.</p>
           <div className="flex gap-8">
              <span>GDPR Compliant</span>
              <span>SOC2 Type II</span>

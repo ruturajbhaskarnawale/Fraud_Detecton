@@ -13,7 +13,7 @@ const outfit = Outfit({
 });
 
 export const metadata: Metadata = {
-  title: "Jotex AI | Premium Identity Verification",
+  title: "Veridex | Forensic Identity Verification",
   description: "Next-generation KYC and Identity Verification system powered by advanced AI and Computer Vision.",
   viewport: "width=device-width, initial-scale=1",
 };

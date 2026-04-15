@@ -1,5 +1,6 @@
 "use client";
 import Link from 'next/link';
+import Image from 'next/image';
 import { ShieldCheck, ArrowRight } from 'lucide-react';
 import { useState } from 'react';
 import { motion, useScroll, useTransform, AnimatePresence } from 'framer-motion';
@@ -47,11 +48,15 @@ export default function Navbar({ variant = 'marketing' }: NavbarProps) {
         <div className="flex justify-between items-center">
           {/* Logo Area */}
           <Link href="/" className="flex items-center space-x-2 group">
-            <div className="bg-blue-600 p-1.5 rounded-lg">
-              <ShieldCheck className="w-5 h-5 text-white" />
-            </div>
+            <Image 
+              src="/logo.png" 
+              alt="Veridex Logo" 
+              width={28} 
+              height={28} 
+              className="w-7 h-7 object-contain"
+            />
             <span className="text-xl font-bold text-slate-900 tracking-tight">
-              JOTEX <span className="text-blue-600">AI</span>
+              VERI<span className="text-blue-600">DEX</span>
             </span>
           </Link>
           

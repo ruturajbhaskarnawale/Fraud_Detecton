@@ -1,5 +1,6 @@
 "use client";
 import Link from 'next/link';
+import Image from 'next/image';
 import { motion, useScroll, useTransform, useSpring, useMotionValue } from 'framer-motion';
 import { 
   ShieldCheck, 
@@ -81,7 +82,7 @@ export default function LandingPage() {
               transition={{ delay: 1.2 }}
               className="max-w-xl mx-auto lg:mx-0 text-lg text-slate-700 font-medium leading-relaxed"
             >
-              Industrial-grade document forensic, biometric match, and real-time fraud telemetry. Secure your ecosystem with Jotex AI.
+              Industrial-grade document forensic, biometric match, and real-time fraud telemetry. Secure your ecosystem with Veridex.
             </motion.p>
 
             <motion.div 
@@ -431,46 +432,178 @@ function IdentityCluster({ scrollYProgress }: { scrollYProgress: any }) {
     return () => window.removeEventListener("mousemove", handleMouse);
   }, [mouseX, mouseY]);
 
+  // Coordinates for mesh connections
+  const assets = [
+    { id: 'identity', icon: <User/>, label: "Identity", x: -160, y: -120, delay: 0 },
+    { id: 'biometrics', icon: <Fingerprint/>, label: "Biometrics", x: 180, y: -80, delay: 1 },
+    { id: 'realtime', icon: <Activity/>, label: "Realtime", x: 140, y: 140, delay: 2 },
+    { id: 'encryption', icon: <Lock/>, label: "Encryption", x: -180, y: 120, delay: 0.5 },
+  ];
+
   return (
     <motion.div 
       style={{ rotateX, rotateY, y: scrollY }}
       className="relative w-full aspect-square flex items-center justify-center preserve-3d"
     >
+      {/* Background Data Cloud */}
+      <DataNodeCloud />
+
+      {/* Radar Scanning Pulses */}
+      <RadarPulse />
+
+      {/* Neural Mesh Connections */}
+      <svg className="absolute inset-0 w-full h-full pointer-events-none z-10" viewBox="-300 -300 600 600 overflow-visible">
+        <defs>
+          <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="rgba(59, 130, 246, 0.4)" />
+            <stop offset="100%" stopColor="rgba(59, 130, 246, 0.05)" />
+          </linearGradient>
+          <filter id="glow">
+             <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+             <feMerge>
+                <feMergeNode in="coloredBlur"/>
+                <feMergeNode in="SourceGraphic"/>
+             </feMerge>
+          </filter>
+        </defs>
+        
+        {assets.map((asset, i) => (
+          <g key={`mesh-${i}`}>
+            {/* Base Connection Line */}
+            <motion.line
+              initial={{ pathLength: 0, opacity: 0 }}
+              animate={{ pathLength: 1, opacity: 1 }}
+              transition={{ delay: 1.5 + asset.delay, duration: 1.5, ease: "easeInOut" }}
+              x1="0" y1="0" x2={asset.x} y2={asset.y}
+              stroke="url(#lineGradient)"
+              strokeWidth="1.5"
+              strokeDasharray="4 4"
+            />
+            {/* Animated Data Pulse */}
+            <motion.circle
+              r="2.5"
+              fill="#3b82f6"
+              filter="url(#glow)"
+              animate={{
+                offsetDistance: ["0%", "100%"]
+              }}
+              transition={{
+                duration: 3,
+                repeat: Infinity,
+                delay: asset.delay,
+                ease: "linear"
+              }}
+              style={{
+                offsetPath: `path('M 0 0 L ${asset.x} ${asset.y}')`
+              }}
+            />
+          </g>
+        ))}
+      </svg>
+
       {/* Central Hub */}
       <motion.div 
         animate={{ scale: [1, 1.05, 1] }} 
         transition={{ duration: 4, repeat: Infinity }}
-        className="w-48 h-48 bg-blue-600 rounded-[3rem] flex items-center justify-center shadow-2xl shadow-blue-400/50 z-20"
+        className="relative w-48 h-48 flex items-center justify-center z-20"
       >
-        <ShieldCheck className="w-20 h-20 text-white" />
+        {/* Core Glow */}
+        <div className="absolute inset-0 bg-blue-500/10 blur-[60px] rounded-full animate-pulse" />
+        <Image 
+          src="/logo.png" 
+          alt="Veridex Logo" 
+          width={140} 
+          height={140} 
+          className="w-36 h-36 object-contain relative z-10" 
+        />
       </motion.div>
 
-      {/* Orbiting Assets */}
-      <FloatingAsset icon={<User/>} label="Identity" x={-120} y={-100} delay={0} />
-      <FloatingAsset icon={<Fingerprint/>} label="Biometrics" x={140} y={-60} delay={1} />
-      <FloatingAsset icon={<Activity/>} label="Realtime" x={100} y={120} delay={2} />
-      <FloatingAsset icon={<Lock/>} label="Encryption" x={-140} y={100} delay={0.5} />
-
-      {/* Decorative Rings */}
-      <motion.div 
-        style={{ rotate: scrollRotate }}
-        className="absolute inset-0 border-2 border-dashed border-blue-200 rounded-full -m-20 pointer-events-none opacity-50" 
-      />
+      {/* Floating Asset Cards */}
+      {assets.map((asset, i) => (
+        <FloatingAsset 
+          key={asset.id}
+          icon={asset.icon} 
+          label={asset.label} 
+          x={asset.x} 
+          y={asset.y} 
+          delay={asset.delay} 
+        />
+      ))}
     </motion.div>
+  );
+}
+
+function RadarPulse() {
+  return (
+    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+      {[1, 2, 3].map((i) => (
+        <motion.div
+          key={i}
+          initial={{ scale: 0.5, opacity: 0 }}
+          animate={{ scale: 2.5, opacity: [0, 0.2, 0] }}
+          transition={{
+            duration: 4,
+            repeat: Infinity,
+            delay: i * 1.3,
+            ease: "easeOut"
+          }}
+          className="absolute w-64 h-64 border border-blue-400/30 rounded-full"
+        />
+      ))}
+    </div>
+  );
+}
+
+function DataNodeCloud() {
+  const nodes = Array.from({ length: 20 });
+  return (
+    <div className="absolute inset-0 pointer-events-none opacity-20">
+      {nodes.map((_, i) => (
+        <motion.div
+          key={i}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: [0, 1, 0] }}
+          transition={{
+            duration: 2 + Math.random() * 3,
+            repeat: Infinity,
+            delay: Math.random() * 5
+          }}
+          style={{
+            left: `${Math.random() * 100}%`,
+            top: `${Math.random() * 100}%`,
+          }}
+          className="absolute w-1 h-1 bg-blue-300 rounded-full"
+        />
+      ))}
+    </div>
   );
 }
 
 function FloatingAsset({ icon, label, x, y, delay }: { icon: any, label: string, x: number, y: number, delay: number }) {
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ delay: 1 + delay, type: "spring" }}
-      style={{ x, y }}
-      className="absolute bg-white/80 backdrop-blur-md p-4 rounded-2xl shadow-xl flex items-center gap-3 border border-white/50 group hover:bg-blue-600 hover:text-white transition-all cursor-default z-30"
+      initial={{ opacity: 0, scale: 0.8, x: 0, y: 0 }}
+      animate={{ opacity: 1, scale: 1, x, y }}
+      transition={{ 
+        delay: 0.5 + delay, 
+        type: "spring", 
+        stiffness: 100, 
+        damping: 15 
+      }}
+      className="absolute bg-white/40 backdrop-blur-2xl p-5 rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.1)] flex items-center gap-4 border border-white/60 group hover:bg-blue-600 hover:text-white transition-all duration-500 cursor-default z-30 group"
     >
-      <div className="text-blue-600 group-hover:text-white transition-colors">{icon}</div>
-      <span className="text-[10px] font-black uppercase tracking-widest">{label}</span>
+      <div className="relative">
+        <div className="absolute inset-0 bg-blue-400/20 blur-lg rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
+        <div className="text-blue-600 group-hover:text-white transition-colors relative z-10">{icon}</div>
+      </div>
+      <div className="flex flex-col">
+        <span className="text-[10px] font-black uppercase tracking-[0.2em] opacity-40 group-hover:opacity-60">{label}</span>
+        <span className="text-[9px] font-bold text-blue-600/80 group-hover:text-white/80 uppercase">Verified</span>
+      </div>
+      
+      {/* Small Connector dot */}
+      <div className="absolute -left-1.5 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full border-2 border-blue-400 opacity-0 group-hover:opacity-100 transition-opacity" />
     </motion.div>
   );
 }
+
