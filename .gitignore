@@ -8,33 +8,52 @@ __pycache__/
 *$py.class
 venv/
 .env
+.env.local
 .pytest_cache/
 
-# Node (Frontend)
+# Node / Next.js
+node_modules/
+.next/
+out/
+build/
 frontend/node_modules/
 frontend/.next/
 frontend/out/
 frontend/build/
+.vercel
 
 # ML Data & Models
-data/raw/
-data/processed/
-data/database/*.db
-models/caches/
+data/
+models/
 uploads/
+!data/.gitkeep
+!models/.gitkeep
+!uploads/.gitkeep
 
-# Large Files
+# Large Files & Binary Data
 *.pt
 *.h5
 *.pkl
 *.bin
+*.tif
+*.pdf
+*.zip
+*.tar.gz
+
+# Images (Ignore in backend/root, keep in frontend public)
+backend/*.jpg
+backend/*.png
+backend/*.jpeg
+backend/temp_*/
+scratch/
+temp/
 
 # Logs & Reports
 logs/
-reports/*.json
-reports/*.csv
+reports/
 scripts/debug/
 
 # IDEs
 .vscode/
 .idea/
+

@@ -2,13 +2,13 @@ import logging
 import os
 import cv2
 import traceback
-from .preprocessing.normalizer import ImageNormalizer
+from .preprocessing.unified import UnifiedPreprocessor
 from .preprocessing.quality_check import QualityChecker
 from .preprocessing.pdf_handler import PDFHandler
 from .ocr.engine import OCREngine
 from .parsing.classifier import DocumentClassifier
 from .parsing.extractor import FieldExtractor
-from .fraud.engine import FraudEngine
+from .fraud.decision_engine import FraudDecisionEngine
 from .face.matcher import FaceMatcher
 from .face.liveness import LivenessDetector
 from .scoring.engine import RiskScoringEngine
@@ -17,13 +17,13 @@ logger = logging.getLogger('KYCPipeline')
 
 class KYCPipeline:
     def __init__(self):
-        self.normalizer = ImageNormalizer()
+        self.preprocessor = UnifiedPreprocessor()
         self.quality_checker = QualityChecker()
         self.pdf_handler = PDFHandler()
         self.ocr_engine = OCREngine()
         self.classifier = DocumentClassifier()
         self.extractor = FieldExtractor()
-        self.fraud_engine = FraudEngine()
+        self.fraud_engine = FraudDecisionEngine()
         self.face_matcher = FaceMatcher()
         self.liveness_detector = LivenessDetector()
         self.scoring_engine = RiskScoringEngine()
@@ -47,10 +47,10 @@ class KYCPipeline:
                 
             # Quality Check
             is_good, q_res = self.quality_checker.check(raw_img)
-            results["id_validation"]["quality"] = {"passed": is_good, "message": q_res.get("issues", "Passed")}
+            results["id_validation"]["quality"] = {"passed": bool(is_good), "message": q_res.get("issues", "Passed")}
             
-            # Normalize
-            norm_img = self.normalizer.normalize(raw_img)
+            # Normalize and Preprocess (Unified)
+            norm_img = self.preprocessor.run_global(id_path)
             
             # 2. OCR & Parsing
             ocr_data = self.ocr_engine.extract_text(norm_img)
@@ -67,27 +67,49 @@ class KYCPipeline:
                 face_res = self.face_matcher.verify(id_path, selfie_path)
                 
                 results["face_validation"] = {
-                    "liveness_passed": liveness_ok,
+                    "liveness_passed": bool(liveness_ok),
                     "liveness_message": liveness_msg,
-                    "verified": face_res["verified"],
+                    "verified": bool(face_res.get("face_match", False)),
                     "similarity": face_res.get("similarity_score", 0.0),
-                    "threshold": face_res.get("threshold", 0.0)
+                    "threshold": face_res.get("threshold", 0.0),
+                    "quality": face_res.get("quality", 0.5),
+                    "status": "COMPLETED"
                 }
+            else:
+                results["face_validation"] = {"status": "PENDING_SELFIE"}
 
-            # 4. Fraud Detection
-            # Passing list of extracted fields (just one doc for now, can be expanded)
-            fraud_res = self.fraud_engine.run_full_audit([fields], [id_path])
+            # 4. Fraud Detection (Hybrid ML + Rules)
+            fraud_res = self.fraud_engine.predict(
+                ocr_data, 
+                fields, 
+                results["face_validation"], 
+                id_path, 
+                doc_type,
+                ground_truth=None,
+                selfie_provided=bool(selfie_path)
+            )
             results["fraud_validation"] = fraud_res
             
             # 5. Risk Scoring
+            consistency_issues = []
+            for r in fraud_res.get("reason", []):
+                label = "data_mismatch"
+                if "FACE" in r: label = "face_mismatch"
+                elif "NAME" in r or "IDENTITY" in r: label = "name_mismatch"
+                elif "DOB" in r: label = "dob_mismatch"
+                
+                # We filter for actual consistency issues as per previous logic but format them as dicts
+                if any(k in r for k in ["INCONSISTENCY", "MISMATCH", "MISSING"]):
+                    consistency_issues.append({"type": label, "details": r})
+
             audit_payload = {
-                "tampering_detected": any(r["is_tampered"] for r in fraud_res["tampering_results"]),
-                "face_similarity": results["face_validation"].get("similarity", 1.0) if selfie_path else 1.0,
-                "face_threshold": results["face_validation"].get("threshold", 0.85) if selfie_path else 0.85,
-                "data_consistency_issues": fraud_res["data_consistency_issues"],
-                "ocr_confidence": sum(d["confidence"] for d in ocr_data)/len(ocr_data) if ocr_data else 0.0,
-                "is_duplicate": False, # Would check against DB in API layer
-                "multi_face": not results["face_validation"].get("liveness_passed", True) # Simplified
+                "tampering_detected": bool(fraud_res.get("status") == "FRAUD"),
+                "face_similarity": float(results["face_validation"].get("similarity", 0.0)) if selfie_path else 1.0,
+                "face_threshold": float(results["face_validation"].get("threshold", 0.55)) if selfie_path else 0.55,
+                "data_consistency_issues": consistency_issues,
+                "ocr_confidence": float(sum(d["confidence"] for d in ocr_data)/len(ocr_data)) if ocr_data else 0.0,
+                "is_duplicate": False, 
+                "multi_face": bool(not results["face_validation"].get("liveness_passed", True)) if selfie_path else False
             }
             
             final = self.scoring_engine.calculate_score(audit_payload)
@@ -98,4 +120,12 @@ class KYCPipeline:
         except Exception as e:
             logger.error(f"Pipeline failure: {e}")
             logger.error(traceback.format_exc())
-            return {"error": str(e), "status": "FAILED"}
+            # Ensure a structured failure response that the frontend can still parse
+            return {
+                "error": str(e),
+                "status": "FAILED",
+                "id_validation": {"type": "UNKNOWN", "extracted_fields": {}},
+                "face_validation": {"similarity": 0.0, "status": "ERROR"},
+                "fraud_validation": {"status": "UNKNOWN", "confidence": 0.0, "reason": [str(e)], "tampering_results": []},
+                "final_decision": {"decision": "REJECTED", "risk_score": 100, "reasons": ["Internal Pipeline Error"]}
+            }

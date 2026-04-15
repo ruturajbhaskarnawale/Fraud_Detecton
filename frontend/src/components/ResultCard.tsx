@@ -15,11 +15,13 @@ export default function ResultCard({ data }: ResultCardProps) {
   const isSuspicious = decision === 'SUSPICIOUS';
   const isValid = decision === 'VALID';
 
-  const statusConfig = {
+  const configMap: Record<string, any> = {
     REJECTED: { icon: XCircle, color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-200' },
     SUSPICIOUS: { icon: AlertCircle, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200' },
     VALID: { icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-50', border: 'border-green-200' },
-  }[decision as keyof typeof statusConfig] || { icon: Info, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-200' };
+  };
+
+  const statusConfig = configMap[decision as keyof typeof configMap] || { icon: Info, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-200' };
 
   return (
     <motion.div 
@@ -69,8 +71,16 @@ export default function ResultCard({ data }: ResultCardProps) {
 
       {/* Fraud Detailed Metrics */}
       <div className="grid grid-cols-2 gap-4">
-        <MetricCard label="ELA Score" value={data.fraud_validation.tampering_results[0].tamper_score.toFixed(2)} unit="pts" />
-        <MetricCard label="Face Match" value={(data.face_validation.similarity * 100).toFixed(1)} unit="%" />
+        <MetricCard 
+          label="ELA Score" 
+          value={data?.fraud_validation?.tampering_results?.[0]?.tamper_score?.toFixed(2) ?? "0.00"} 
+          unit="pts" 
+        />
+        <MetricCard 
+          label="Face Match" 
+          value={( (data?.face_validation?.similarity ?? 0) * 100).toFixed(1)} 
+          unit="%" 
+        />
       </div>
     </motion.div>
   );

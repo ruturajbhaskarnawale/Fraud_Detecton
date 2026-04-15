@@ -36,10 +36,14 @@ class RiskScoringEngine:
             
         # 3. Data Mismatches
         for issue in audit_results.get("data_consistency_issues", []):
+            # Defensive check for string issues (legacy or malformed input)
+            if isinstance(issue, str):
+                issue = {"type": "data_mismatch", "details": issue}
+                
             label = issue.get("type", "data_mismatch")
             impact = self.weights.get(label, 20)
             score += impact
-            reasons.append(issue["details"])
+            reasons.append(issue.get("details", "Data consistency issue detected"))
                 
         # 4. OCR Confidence
         if audit_results.get("ocr_confidence", 1.0) < 0.4:

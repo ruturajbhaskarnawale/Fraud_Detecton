@@ -18,16 +18,48 @@ class OCREngine:
 
     def extract_text(self, image, min_confidence=0.4):
         """
-        Extract text from image using EasyOCR.
-        Returns a list of dicts with text, bounding box, and confidence.
+        Extract text from image using EasyOCR with tuned parameters.
         """
-        logger.info("Starting OCR extraction...")
+        if image is None:
+            logger.warning("Received None image for OCR. Skipping.")
+            return []
+            
+        logger.info("Starting tuned OCR extraction...")
         
-        # EasyOCR can take image path, cv2 image, or PIL image
-        results = self.reader.readtext(image)
-        
+        # Tuned parameters for high performance
+        try:
+            results = self.reader.readtext(
+                image,
+                paragraph=True,
+                slope_ths=0.2,
+                height_ths=0.5
+            )
+        except Exception as e:
+            logger.warning(f"EasyOCR tuned inference failed ({e}). Retrying with safe defaults...")
+            try:
+                # Provide a basic non-dict readtext method
+                results = self.reader.readtext(image)
+            except Exception as e2:
+                logger.error(f"EasyOCR safe fallback also failed: {e2}")
+                return []
+                
+        if results is None or isinstance(results, bool):
+            logger.warning(f"EasyOCR returned invalid type: {type(results)}. Forcing list.")
+            results = []
+            
+        elif not isinstance(results, (list, tuple)):
+            logger.warning(f"EasyOCR returned unexpected type: {type(results)}. Forcing list.")
+            results = list(results) if hasattr(results, "__iter__") else []
+
         extracted_data = []
-        for (bbox, text, prob) in results:
+        for result in results:
+            # results might have diff structure with paragraph=True
+            if len(result) == 3:
+                bbox, text, prob = result
+            else:
+                bbox, text = result
+                prob = 0.9 # Default for paragraph grouping if missing
+                
             if prob >= min_confidence:
                 extracted_data.append({
                     "text": text,
