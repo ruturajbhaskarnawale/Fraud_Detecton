@@ -1,76 +1,63 @@
 import Link from 'next/link';
 import Image from 'next/image';
-import { ShieldCheck, ArrowUpRight } from 'lucide-react';
+import { ShieldCheck, ArrowRight } from 'lucide-react';
 
 export default function Footer() {
   return (
-    <footer className="bg-slate-950 text-slate-400 py-16 px-6 border-t border-slate-900">
-      <div className="max-w-7xl mx-auto space-y-12">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-12">
-          {/* Brand Column */}
-          <div className="col-span-1 md:col-span-1 space-y-6">
-            <div className="flex items-center gap-2 text-white">
-              <Image 
-                src="/logo.png" 
-                alt="Veridex Logo" 
-                width={28} 
-                height={28} 
-                className="w-7 h-7 object-contain"
-              />
-              <span className="font-bold text-xl tracking-tight">Veri<span className="text-blue-500">dex</span></span>
+    <footer className="relative bg-[#020617] pt-24 pb-16 px-6 overflow-hidden border-t border-white/5">
+      {/* Subtle glow background */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-px bg-gradient-to-r from-transparent via-blue-500/50 to-transparent" />
+      
+      <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 relative z-10">
+         {/* Column 1: Branding */}
+         <div className="lg:col-span-2 space-y-6">
+            <div className="flex items-center gap-2">
+               <Image src="/logo2.png" alt="Veridex AI" width={32} height={32} className="w-8 h-8 object-contain" />
+               <span className="text-2xl font-black tracking-tighter italic text-white">Veridex<span className="text-blue-600 not-italic"></span></span>
             </div>
-            <p className="text-sm leading-relaxed font-medium max-w-xs">
-              Industrial-grade document forensic and biometric verification solutions for high-growth modern enterprises.
+            <p className="max-w-xs text-sm font-medium text-slate-500 leading-relaxed">
+               Industrial-grade identity verification for high-stakes environments. Autonomy in trust, powered by forensics.
             </p>
-          </div>
+         </div>
 
-          {/* Links Columns */}
-          <div className="md:col-span-3 grid grid-cols-2 md:grid-cols-3 gap-8">
-            <FooterGroup title="Platform" links={[
-              { name: 'Identity Lab', href: '/verify' },
-              { name: 'Intelligence Hub', href: '/dashboard' },
-              { name: 'Audit History', href: '/history' },
-            ]} />
-            <FooterGroup title="Resources" links={[
-              { name: 'Documentation', href: '#' },
-              { name: 'API Reference', href: '#' },
-              { name: 'System Status', href: '#' },
-            ]} />
-            <FooterGroup title="Legal" links={[
-              { name: 'Privacy Policy', href: '#' },
-              { name: 'Security Protocol', href: '#' },
-              { name: 'Cookie Policy', href: '#' },
-            ]} />
-          </div>
-        </div>
+         {/* Column 2: RESOURCES */}
+         <div className="space-y-6">
+            <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Resources</h4>
+            <nav className="flex flex-col gap-4">
+               <FooterLink href="/documentation">Documentation</FooterLink>
+               <FooterLink href="/api-reference">API Reference</FooterLink>
+               <FooterLink href="/status">System Status</FooterLink>
+            </nav>
+         </div>
 
-        <div className="pt-8 border-t border-slate-900 flex flex-col md:flex-row justify-between items-center gap-6 text-[10px] font-bold uppercase tracking-widest opacity-50">
-          <p>© 2026 Veridex Labs. All rights reserved.</p>
-          <div className="flex gap-8">
-             <span>GDPR Compliant</span>
-             <span>SOC2 Type II</span>
-             <span>ISO 27001</span>
-          </div>
-        </div>
+         {/* Column 3: LEGAL */}
+         <div className="space-y-6">
+            <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Legal</h4>
+            <nav className="flex flex-col gap-4">
+               <FooterLink href="/privacy" arrow>Privacy Policy</FooterLink>
+               <FooterLink href="/security">Security Protocol</FooterLink>
+               <FooterLink href="/cookies">Cookie Policy</FooterLink>
+            </nav>
+         </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto mt-24 pt-8 border-t border-white/5 flex flex-col items-center justify-center gap-4">
+         <p className="text-[10px] font-bold text-slate-600 uppercase tracking-[0.3em]">
+           © 2026 Veridex AI • All Verification Rights Reserved
+         </p>
       </div>
     </footer>
   );
 }
 
-function FooterGroup({ title, links }: { title: string, links: { name: string, href: string }[] }) {
+function FooterLink({ href, children, arrow = false }: { href: string, children: React.ReactNode, arrow?: boolean }) {
   return (
-    <div className="space-y-4">
-      <h4 className="text-white font-bold uppercase tracking-widest text-[10px] opacity-40">{title}</h4>
-      <ul className="space-y-2">
-        {links.map((link) => (
-          <li key={link.name}>
-            <Link href={link.href} className="group flex items-center gap-1 hover:text-white transition-all text-sm font-medium">
-              {link.name}
-              <ArrowUpRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-all" />
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </div>
+    <Link 
+      href={href} 
+      className="text-lg font-black text-white hover:text-blue-500 transition-colors flex items-center gap-1.5 group font-sans tracking-tight"
+    >
+      {children}
+      {arrow && <ArrowRight className="w-4 h-4 text-slate-600 group-hover:text-blue-500 transition-colors" />}
+    </Link>
   );
 }

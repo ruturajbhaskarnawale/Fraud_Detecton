@@ -49,14 +49,13 @@ export default function Navbar({ variant = 'marketing' }: NavbarProps) {
           {/* Logo Area */}
           <Link href="/" className="flex items-center space-x-2 group">
             <Image 
-              src="/logo.png" 
+              src="/logo2.png" 
               alt="Veridex Logo" 
               width={28} 
               height={28} 
               className="w-7 h-7 object-contain"
             />
-            <span className="text-xl font-bold text-slate-900 tracking-tight">
-              VERI<span className="text-blue-600">DEX</span>
+            <span className="text-xl font-black text-slate-900 tracking-tight italic text-white"><span className="text-blue-600">Veridex</span>
             </span>
           </Link>
           
