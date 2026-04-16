@@ -19,7 +19,7 @@ class VerificationRecord(Base):
     name = Column(String)
     dob = Column(String)
     
-    # Fraud Signals
+    # Forensic Signals
     risk_score = Column(Float)
     decision = Column(String)
     reasons = Column(JSON)
@@ -27,12 +27,17 @@ class VerificationRecord(Base):
     fraud_status = Column(String)
     face_match_distance = Column(Float)
     
+    # Advanced Detections
+    quality_check = Column(JSON)
+    liveness_status = Column(String)
+    raw_ocr_data = Column(JSON)
+    
     # Files
     image_paths = Column(JSON)
     
 # DB Setup
 import os
-db_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "database")
+db_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "data", "database")
 os.makedirs(db_dir, exist_ok=True)
 DB_URL = f"sqlite:///{os.path.join(db_dir, 'kyc_verification.db')}"
 engine = create_engine(DB_URL, connect_args={"check_same_thread": False})

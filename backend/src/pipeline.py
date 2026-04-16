@@ -60,6 +60,7 @@ class KYCPipeline:
             
             results["id_validation"]["type"] = doc_type
             results["id_validation"]["extracted_fields"] = fields
+            results["id_validation"]["raw_ocr_data"] = ocr_data # Capture raw metadata for audit
             
             # 3. Face & Liveness
             if selfie_path:

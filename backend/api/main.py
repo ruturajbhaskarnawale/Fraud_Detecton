@@ -10,6 +10,7 @@ import uuid
 import time
 import logging
 import datetime
+import traceback
 
 from src.pipeline import KYCPipeline
 from src.database.models import SessionLocal, VerificationRecord, init_db
@@ -19,16 +20,20 @@ class RecordSchema(BaseModel):
     id: int
     tracking_id: str
     timestamp: datetime.datetime
-    doc_type: str
-    id_number: Optional[str]
-    name: Optional[str]
-    dob: Optional[str]
-    risk_score: float
-    decision: str
-    reasons: List[str]
-    fraud_confidence: float
-    fraud_status: str
-    face_match_distance: float
+    doc_type: Optional[str] = "UNKNOWN"
+    id_number: Optional[str] = None
+    name: Optional[str] = None
+    dob: Optional[str] = None
+    risk_score: Optional[float] = 0.0
+    decision: Optional[str] = "UNKNOWN"
+    reasons: Optional[List[str]] = []
+    fraud_confidence: Optional[float] = 0.0
+    fraud_status: Optional[str] = "UNKNOWN"
+    face_match_distance: Optional[float] = 0.0
+    # New Forensic Fields
+    quality_check: Optional[Dict[str, Any]] = None
+    liveness_status: Optional[str] = None
+    raw_ocr_data: Optional[List[Any]] = None
     image_paths: Dict[str, Optional[str]]
 
     class ConfigDict:
@@ -130,6 +135,13 @@ async def verify_kyc(
         fraud_val = results.get("fraud_validation", {})
         fraud_conf = fraud_val.get("confidence", 0.0)
         fraud_status = fraud_val.get("status", "UNKNOWN")
+        
+        # Extract Advanced Forensic Signals
+        quality = results.get("id_validation", {}).get("quality", {})
+        liveness_val = results.get("face_validation", {})
+        liveness_str = "PENDING"
+        if selfie:
+            liveness_str = "PASSED" if liveness_val.get("liveness_passed") else f"FAILED: {liveness_val.get('liveness_message', 'No Face Detected')}"
             
         # Save to Database
         db_record = VerificationRecord(
@@ -144,6 +156,10 @@ async def verify_kyc(
             fraud_confidence=fraud_conf,
             fraud_status=fraud_status,
             face_match_distance=results["face_validation"].get("similarity", 0.0),
+            # New Forensic Persistence
+            quality_check=quality,
+            liveness_status=liveness_str,
+            raw_ocr_data=results.get("id_validation", {}).get("raw_ocr_data"),
             image_paths=image_paths
         )
         
@@ -169,6 +185,7 @@ async def verify_kyc(
         
     except Exception as e:
         logging.error(f"Failed to process API call: {e}")
+        logging.error(traceback.format_exc()) # Added for better debug
         return JSONResponse(status_code=500, content=ErrorResponse(status="FAILED", tracking_id=tracking_id, error=str(e)).model_dump())
 
 @app.get("/", tags=["Health"])
