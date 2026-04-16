@@ -9,9 +9,10 @@ interface DropzoneProps {
   label: string;
   icon?: React.ReactNode;
   className?: string;
+  accept?: string;
 }
 
-export default function Dropzone({ onFileSelect, label, icon, className }: DropzoneProps) {
+export default function Dropzone({ onFileSelect, label, icon, className, accept }: DropzoneProps) {
   const [dragActive, setDragActive] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
 
@@ -68,7 +69,7 @@ export default function Dropzone({ onFileSelect, label, icon, className }: Dropz
         type="file" 
         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
         onChange={handleFileChange}
-        accept="image/*"
+        accept={accept || ".jpg,.jpeg,.png,.webp"}
       />
 
       {fileName ? (

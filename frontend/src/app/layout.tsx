@@ -12,10 +12,14 @@ const outfit = Outfit({
   variable: "--font-outfit",
 });
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+};
+
 export const metadata: Metadata = {
   title: "Veridex | Forensic Identity Verification",
   description: "Next-generation KYC and Identity Verification system powered by advanced AI and Computer Vision.",
-  viewport: "width=device-width, initial-scale=1",
 };
 
 export default function RootLayout({

@@ -149,6 +149,7 @@ export default function VerifyPage() {
                          <Dropzone 
                            label="Aadhaar / PAN Card" 
                            onFileSelect={setIdFile}
+                           accept=".jpg,.jpeg,.png,.pdf"
                            icon={<SearchCode className="w-6 h-6" />}
                            className="h-[280px]"
                          />
@@ -158,6 +159,7 @@ export default function VerifyPage() {
                          <Dropzone 
                            label="Live Selfie Access" 
                            onFileSelect={setSelfieFile}
+                           accept=".jpg,.jpeg,.png"
                            icon={<Fingerprint className="w-6 h-6" />}
                            className="h-[280px]"
                          />

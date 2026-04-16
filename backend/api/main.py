@@ -1,6 +1,7 @@
 from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, Form
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Dict, Any, List, Optional
@@ -8,11 +9,10 @@ import os
 import uuid
 import time
 import logging
+import datetime
 
 from src.pipeline import KYCPipeline
 from src.database.models import SessionLocal, VerificationRecord, init_db
-
-import datetime
 
 # Pydantic Schemas
 class RecordSchema(BaseModel):
@@ -64,12 +64,31 @@ UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")
 if not os.path.exists(UPLOAD_DIR):
     os.makedirs(UPLOAD_DIR)
 
+# Mount uploads directory to serve images via web URLs
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+
 def get_db():
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
+
+def transform_record_paths(record: VerificationRecord):
+    """Convert absolute system paths to relative web URLs."""
+    if not record.image_paths:
+        return record
+    
+    new_paths = {}
+    for key, path in record.image_paths.items():
+        if path:
+            filename = os.path.basename(path)
+            new_paths[key] = f"/uploads/{filename}"
+        else:
+            new_paths[key] = None
+    
+    record.image_paths = new_paths
+    return record
 
 @app.post("/verify", response_model=VerifyResponse, responses={500: {"model": ErrorResponse}})
 async def verify_kyc(
@@ -81,18 +100,21 @@ async def verify_kyc(
     tracking_id = str(uuid.uuid4())
     
     try:
-        # Save files asynchronously to avoid thread blocking
+        # Save files asynchronously
         id_ext = id_card.filename.split(".")[-1]
-        id_path = os.path.join(UPLOAD_DIR, f"{tracking_id}_id.{id_ext}")
+        id_filename = f"{tracking_id}_id.{id_ext}"
+        id_path = os.path.join(UPLOAD_DIR, id_filename)
         
         id_contents = await id_card.read()
         with open(id_path, "wb") as f:
             f.write(id_contents)
             
+        selfie_filename = None
         selfie_path = None
         if selfie:
             self_ext = selfie.filename.split(".")[-1]
-            selfie_path = os.path.join(UPLOAD_DIR, f"{tracking_id}_selfie.{self_ext}")
+            selfie_filename = f"{tracking_id}_selfie.{self_ext}"
+            selfie_path = os.path.join(UPLOAD_DIR, selfie_filename)
             self_contents = await selfie.read()
             with open(selfie_path, "wb") as f:
                 f.write(self_contents)
@@ -105,7 +127,6 @@ async def verify_kyc(
         if "error" in results:
             return JSONResponse(status_code=500, content=ErrorResponse(status="FAILED", tracking_id=tracking_id, error=results["error"]).model_dump())
             
-        # Extract Fraud DB maps carefully against Phase 3 structures
         fraud_val = results.get("fraud_validation", {})
         fraud_conf = fraud_val.get("confidence", 0.0)
         fraud_status = fraud_val.get("status", "UNKNOWN")
@@ -132,11 +153,17 @@ async def verify_kyc(
         
         latency_ms = round((time.time() - start_time) * 1000, 2)
         
+        # Return relative web paths for immediate frontend use
+        web_image_paths = {
+            "id_card": f"/uploads/{id_filename}",
+            "selfie": f"/uploads/{selfie_filename}" if selfie_filename else None
+        }
+        
         return VerifyResponse(
             status="SUCCESS",
             tracking_id=tracking_id,
             latency_ms=latency_ms,
-            image_paths=image_paths,
+            image_paths=web_image_paths,
             results=results
         )
         
@@ -155,7 +182,8 @@ def health_check():
 @app.get("/records", response_model=List[RecordSchema])
 def list_records(db: Session = Depends(get_db)):
     """Retrieve the last 100 verification records from the database."""
-    return db.query(VerificationRecord).order_by(VerificationRecord.timestamp.desc()).limit(100).all()
+    records = db.query(VerificationRecord).order_by(VerificationRecord.timestamp.desc()).limit(100).all()
+    return [transform_record_paths(record) for record in records]
 
 @app.get("/records/{tracking_id}", response_model=RecordSchema)
 def get_record(tracking_id: str, db: Session = Depends(get_db)):
@@ -163,4 +191,4 @@ def get_record(tracking_id: str, db: Session = Depends(get_db)):
     record = db.query(VerificationRecord).filter(VerificationRecord.tracking_id == tracking_id).first()
     if not record:
         raise HTTPException(status_code=404, detail="Record not found")
-    return record
+    return transform_record_paths(record)

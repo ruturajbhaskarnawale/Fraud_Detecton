@@ -1,14 +1,12 @@
 "use client";
 import { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ShieldCheck, 
   User, 
   Calendar, 
   Fingerprint, 
   AlertCircle, 
-  CheckCircle2, 
-  XCircle,
   Clock,
   ArrowLeft,
   Share2,
@@ -16,8 +14,7 @@ import {
   Activity,
   FileText,
   Eye,
-  ChevronRight,
-  TrendingUp,
+  X,
   SearchCode
 } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
@@ -31,6 +28,9 @@ export default function ResultsPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedAsset, setSelectedAsset] = useState<string | null>(null);
+
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
   useEffect(() => {
     const fetchResult = async () => {
@@ -46,6 +46,28 @@ export default function ResultsPage() {
     };
     if (id) fetchResult();
   }, [id]);
+
+  const handleShare = async () => {
+    const url = window.location.href;
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Veridex Forensic Report',
+          text: `KYC Verification for ${data?.name || 'Identity'}`,
+          url: url
+        });
+      } catch (err) {
+        console.log("Share cancelled");
+      }
+    } else {
+      navigator.clipboard.writeText(url);
+      alert("Link copied to clipboard!");
+    }
+  };
+
+  const handleExportPDF = () => {
+    window.print();
+  };
 
   if (loading) return (
     <div className="flex flex-col items-center justify-center min-h-screen space-y-4 bg-slate-50">
@@ -70,16 +92,16 @@ export default function ResultsPage() {
     </div>
   );
 
-  const { decision, risk_score, reasons, fraud_status, fraud_confidence, face_match_distance } = data;
+  const { decision, risk_score, reasons, fraud_status, face_match_distance, image_paths } = data;
   const isOk = decision === 'VALID';
   const isSuspicious = decision === 'SUSPICIOUS';
 
   return (
-    <div className="space-y-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="space-y-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 print:p-0 print:max-w-none">
       {/* Header Bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-slate-200 pb-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-slate-200 pb-8 print:border-none">
         <div className="flex items-center gap-4">
-           <button onClick={() => router.back()} className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-400">
+           <button onClick={() => router.back()} className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-400 print:hidden">
               <ArrowLeft className="w-6 h-6" />
            </button>
            <div>
@@ -90,11 +112,17 @@ export default function ResultsPage() {
               </h1>
            </div>
         </div>
-        <div className="flex items-center gap-3">
-           <button className="px-4 py-2 border border-slate-200 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors flex items-center gap-2">
+        <div className="flex items-center gap-3 print:hidden">
+           <button 
+             onClick={handleShare}
+             className="px-4 py-2 border border-slate-200 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors flex items-center gap-2"
+           >
              <Share2 className="w-4 h-4" /> Share
            </button>
-           <button className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-semibold hover:bg-slate-800 transition-colors flex items-center gap-2 shadow-sm">
+           <button 
+             onClick={handleExportPDF}
+             className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-semibold hover:bg-slate-800 transition-colors flex items-center gap-2 shadow-sm"
+           >
              <Download className="w-4 h-4" /> Export PDF
            </button>
         </div>
@@ -142,7 +170,7 @@ export default function ResultsPage() {
             <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
                <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
                   <h3 className="font-bold text-slate-900 text-sm uppercase tracking-widest">Document Insight</h3>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{new Date(data.created_at).toLocaleString()}</p>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{new Date(data.timestamp).toLocaleString()}</p>
                </div>
                <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
                   <DataRow icon={User} label="Legal Full Name" value={data.name} />
@@ -152,12 +180,20 @@ export default function ResultsPage() {
                </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-               <AssetDisplay label="Identity Asset" />
-               <AssetDisplay label="Biometric Asset" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 print:break-inside-avoid">
+               <AssetDisplay 
+                 label="Identity Asset" 
+                 src={image_paths?.id_card ? `${API_URL}${image_paths.id_card}` : null} 
+                 onExpand={(src) => setSelectedAsset(src)}
+               />
+               <AssetDisplay 
+                 label="Biometric Asset" 
+                 src={image_paths?.selfie ? `${API_URL}${image_paths.selfie}` : null} 
+                 onExpand={(src) => setSelectedAsset(src)}
+               />
             </div>
 
-            <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm">
+            <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm print:break-inside-avoid">
                <h3 className="font-bold text-slate-900 text-sm uppercase tracking-widest mb-8">Forensic Pipeline Status</h3>
                <div className="space-y-6">
                   <PipelineStatus label="Neural Extraction" progress={98.8} />
@@ -167,6 +203,31 @@ export default function ResultsPage() {
             </div>
          </div>
       </div>
+
+      {/* Lightbox Modal */}
+      <AnimatePresence>
+        {selectedAsset && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setSelectedAsset(null)}
+            className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-8 backdrop-blur-sm cursor-zoom-out print:hidden"
+          >
+            <button className="absolute top-8 right-8 text-white p-2 hover:bg-white/10 rounded-full">
+              <X className="w-8 h-8" />
+            </button>
+            <motion.img 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              src={selectedAsset} 
+              alt="Forensic Asset" 
+              className="max-w-full max-h-full rounded-lg shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -183,14 +244,27 @@ function DataRow({ icon: Icon, label, value, className }: any) {
   );
 }
 
-function AssetDisplay({ label }: { label: string }) {
+function AssetDisplay({ label, src, onExpand }: { label: string; src: string | null; onExpand: (src: string) => void }) {
   return (
-    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-8 flex flex-col items-center justify-center gap-4 group">
-       <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-slate-300 shadow-sm border border-slate-100">
-          <Eye className="w-6 h-6" />
-       </div>
+    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 flex flex-col items-center justify-center gap-4 group transition-all hover:bg-white hover:border-slate-300 shadow-sm hover:shadow-md h-[240px]">
+       {src ? (
+         <div className="relative w-full h-full rounded-xl overflow-hidden cursor-zoom-in" onClick={() => onExpand(src)}>
+           <img src={src} alt={label} className="w-full h-full object-cover transition-transform group-hover:scale-105" />
+           <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+             <Eye className="w-6 h-6 text-white" />
+           </div>
+         </div>
+       ) : (
+         <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-slate-300 shadow-sm border border-slate-100">
+            <Eye className="w-6 h-6" />
+         </div>
+       )}
        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{label}</p>
-       <span className="px-3 py-1 bg-slate-100 text-[9px] font-bold text-slate-500 rounded-md uppercase tracking-widest">Click to View Asset</span>
+       {src ? (
+         <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity">Click to Expand</p>
+       ) : (
+         <span className="px-3 py-1 bg-slate-100 text-[9px] font-bold text-slate-500 rounded-md uppercase tracking-widest">Not Uploaded</span>
+       )}
     </div>
   );
 }

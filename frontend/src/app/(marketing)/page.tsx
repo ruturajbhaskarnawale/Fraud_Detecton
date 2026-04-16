@@ -555,6 +555,11 @@ function RadarPulse() {
 }
 
 function DataNodeCloud() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  if (!mounted) return null;
+
   const nodes = Array.from({ length: 20 });
   return (
     <div className="absolute inset-0 pointer-events-none opacity-20">
