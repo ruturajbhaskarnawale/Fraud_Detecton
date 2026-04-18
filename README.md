@@ -15,7 +15,7 @@ Veridex AI is a high-performance, production-grade identity verification system 
 
 | Dashboard Interface | Verification Workflow |
 | :--- | :--- |
-| ![Dashboard Placeholder](https://raw.githubusercontent.com/ruturajbhaskarnawale/Fraud_Detection/main/docs/assets/dashboard_mockup.png) | ![Results Placeholder](https://raw.githubusercontent.com/ruturajbhaskarnawale/Fraud_Detection/main/docs/assets/results_mockup.png) |
+| ![Dashboard Overview](screenshots/results_page.png) | ![Verification Process](screenshots/verify_page.png) |
 
 ---
 

@@ -35,7 +35,9 @@ export default function ResultsPage() {
   useEffect(() => {
     const fetchResult = async () => {
       try {
+        if (!id) return;
         const record = await verificationService.getRecord(id as string);
+        if (!record) throw new Error("No data found");
         setData(record);
       } catch (err: any) {
         console.error("Failed to fetch result:", err);
@@ -44,7 +46,7 @@ export default function ResultsPage() {
         setLoading(false);
       }
     };
-    if (id) fetchResult();
+    fetchResult();
   }, [id]);
 
   const handleShare = async () => {
@@ -70,20 +72,20 @@ export default function ResultsPage() {
   };
 
   if (loading) return (
-    <div className="flex flex-col items-center justify-center min-h-screen space-y-4 bg-slate-50">
-      <div className="w-12 h-12 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin" />
-      <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">Loading Report...</p>
+    <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
+      <div className="w-12 h-12 border-4 border-blue-500/20 border-t-blue-600 rounded-full animate-spin" />
+      <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Compiling Forensic Data...</p>
     </div>
   );
 
-  if (error) return (
+  if (error || !data) return (
     <div className="max-w-xl mx-auto py-20 px-6 text-center space-y-6">
       <div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center mx-auto shadow-sm">
         <AlertCircle className="w-8 h-8" />
       </div>
       <div className="space-y-2">
-         <h1 className="text-2xl font-bold text-slate-900">Report Error</h1>
-         <p className="text-slate-600 font-medium">{error}</p>
+         <h1 className="text-2xl font-bold text-slate-900">Audit Error</h1>
+         <p className="text-slate-600 font-medium">{error || "Record missing from database."}</p>
       </div>
       <Link href="/history" className="inline-flex items-center gap-2 px-6 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold text-sm tracking-tight hover:bg-slate-200 transition-all">
          <ArrowLeft className="w-4 h-4" />
@@ -92,12 +94,17 @@ export default function ResultsPage() {
     </div>
   );
 
-  const { decision, risk_score, reasons, fraud_status, face_match_distance, image_paths } = data;
+  const decision = data.decision || 'UNKNOWN';
+  const risk_score = data.risk_score || 0;
+  const reasons = data.reasons || [];
+  const image_paths = data.image_paths || {};
+  const face_match_distance = data.face_match_distance || 0;
+
   const isOk = decision === 'VALID';
   const isSuspicious = decision === 'SUSPICIOUS';
 
   return (
-    <div className="space-y-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 print:p-0 print:max-w-none">
+    <div className="space-y-8 max-w-7xl mx-auto py-8 print:p-0 print:max-w-none">
       {/* Header Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-slate-200 pb-8 print:border-none">
         <div className="flex items-center gap-4">
@@ -107,7 +114,7 @@ export default function ResultsPage() {
            <div>
               <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest bg-blue-50 px-2 py-0.5 rounded-md inline-block mb-1">Audit Record</p>
               <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-3">
-                 Verification Result
+                 Forensic Result
                  <span className="text-xs font-mono font-medium text-slate-400">#{id?.toString().slice(0, 8)}</span>
               </h1>
            </div>
@@ -141,26 +148,28 @@ export default function ResultsPage() {
                   {isOk ? <ShieldCheck className="w-10 h-10 text-emerald-500" /> : <AlertCircle className="w-10 h-10 text-rose-500" />}
                </div>
                <div>
-                  <p className="text-xs font-bold uppercase tracking-widest opacity-60 mb-1">Final Verdict</p>
+                  <p className="text-xs font-bold uppercase tracking-widest opacity-60 mb-1">Status Verdict</p>
                   <h2 className="text-4xl font-black tracking-tight">{decision}</h2>
                </div>
                <div className="w-full h-2 bg-black/5 rounded-full overflow-hidden">
                   <div className={cn("h-full", isOk ? "bg-emerald-500" : "bg-rose-500")} style={{ width: `${100 - risk_score}%` }} />
                </div>
-               <p className="text-xs font-bold uppercase opacity-60 tracking-widest">Trust Level: {(100 - risk_score).toFixed(1)}%</p>
+               <p className="text-xs font-bold uppercase opacity-60 tracking-widest">Trust Index: {(100 - risk_score).toFixed(1)}%</p>
             </div>
 
             <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
                <h3 className="font-bold text-slate-900 text-sm uppercase tracking-widest flex items-center gap-2">
-                 <Activity className="w-4 h-4 text-blue-600" /> Security Signals
+                 <Activity className="w-4 h-4 text-blue-600" /> Compliance Signals
                </h3>
                <div className="space-y-4">
-                  {reasons.map((reason: string, i: number) => (
+                  {reasons.length > 0 ? reasons.map((reason: string, i: number) => (
                     <div key={i} className="flex gap-3 items-start p-3 bg-slate-50 rounded-lg">
                        <div className={cn("mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0", isOk ? "bg-emerald-500" : "bg-amber-500")} />
                        <p className="text-xs font-semibold text-slate-700 leading-snug">{reason}</p>
                     </div>
-                  ))}
+                  )) : (
+                    <p className="text-xs font-medium text-slate-400 text-center py-4 italic">No adverse signals detected.</p>
+                  )}
                </div>
             </div>
          </div>
@@ -169,35 +178,35 @@ export default function ResultsPage() {
          <div className="lg:col-span-8 space-y-8">
             <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
                <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
-                  <h3 className="font-bold text-slate-900 text-sm uppercase tracking-widest">Document Insight</h3>
+                  <h3 className="font-bold text-slate-900 text-sm uppercase tracking-widest">Identity Audit</h3>
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{new Date(data.timestamp).toLocaleString()}</p>
                </div>
                <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
                   <DataRow icon={User} label="Legal Full Name" value={data.name} />
                   <DataRow icon={Fingerprint} label="Identity Number" value={data.id_number} />
                   <DataRow icon={Calendar} label="Date of Birth" value={data.dob} />
-                  <DataRow icon={FileText} label="Tracking Reference" value={data.tracking_id} className="font-mono text-[10px]" />
+                  <DataRow icon={FileText} label="Asset Ref" value={data.tracking_id} className="font-mono text-[10px]" />
                </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 print:break-inside-avoid">
                <AssetDisplay 
-                 label="Identity Asset" 
+                 label="Identity Document" 
                  src={image_paths?.id_card ? `${API_URL}${image_paths.id_card}` : null} 
                  onExpand={(src) => setSelectedAsset(src)}
                />
                <AssetDisplay 
-                 label="Biometric Asset" 
+                 label="Biometric Verification" 
                  src={image_paths?.selfie ? `${API_URL}${image_paths.selfie}` : null} 
                  onExpand={(src) => setSelectedAsset(src)}
                />
             </div>
 
             <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm print:break-inside-avoid">
-               <h3 className="font-bold text-slate-900 text-sm uppercase tracking-widest mb-8">Forensic Pipeline Status</h3>
+               <h3 className="font-bold text-slate-900 text-sm uppercase tracking-widest mb-8">Neural Pipeline Analytics</h3>
                <div className="space-y-6">
-                  <PipelineStatus label="Neural Extraction" progress={98.8} />
-                  <PipelineStatus label="Signal Match" progress={100 - risk_score} />
+                  <PipelineStatus label="Attribute Extraction" progress={98.8} />
+                  <PipelineStatus label="Matching Logic" progress={100 - risk_score} />
                   <PipelineStatus label="Biometric Scaling" progress={face_match_distance < 0.6 ? 100 : 40} />
                </div>
             </div>
