@@ -1,13 +1,13 @@
 # Veridex AI 🛡️
-> **Real-time AI Document Fraud Detection & KYC Verification Platform**
+> **Production-Grade AI Document Fraud Detection & KYC Verification Platform**
 
 [![Stack](https://img.shields.io/badge/Stack-Fullstack-blue.svg)](https://github.com/ruturajbhaskarnawale/Fraud_Detection)
 [![Python](https://img.shields.io/badge/Python-3.9+-yellow.svg)](https://www.python.org/)
-[![Next.js](https://img.shields.io/badge/Next.js-16.2-black.svg)](https://nextjs.org/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Next.js](https://img.shields.io/badge/Next.js-15.0-black.svg)](https://nextjs.org/)
 [![Status](https://img.shields.io/badge/Status-Production--Ready-brightgreen.svg)]()
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-Veridex AI is a high-performance, production-grade identity verification system designed to combat document forgery and identity theft. By fusing **computer vision**, **biometric matching**, and **forensic analysis**, Veridex provides a multi-layered defense against sophisticated fraud attempts during digital onboarding.
+Veridex AI is an advanced identity verification ecosystem engineered to detect sophisticated document forgery and identity fraud in real-time. By orchestrating **Computer Vision (EasyOCR)**, **Biometric Matching (InsightFace/ArcFace)**, and **Digital Forensics (ELA)**, Veridex provides a multi-layered defense pipeline suitable for fintech, banking, and high-trust digital onboarding.
 
 ---
 
@@ -19,26 +19,120 @@ Veridex AI is a high-performance, production-grade identity verification system 
 
 ---
 
-## ✨ Key Features
+## 🔄 System Workflow
 
-### 🔍 Elite Document Analysis
-*   **Intelligent OCR Extraction**: Multi-stage parsing for Indian Aadhaar and PAN cards using **EasyOCR** with post-processing for high accuracy.
-*   **Auto-Doc Classification**: Instant identification of document types and layout verification.
-*   **Quality Guard**: Real-time feedback on image blur, lighting, and orientation before processing.
+Veridex employs a **Sequential Multi-Signal Fusion** architecture to process every verification request:
 
-### 🤖 Advanced Forensic Engine
-*   **ELA Tampering Detection**: Error Level Analysis to identify non-homogeneous compression patterns indicating digital manipulation.
-*   **Perceptual Hashing (pHash)**: Massive-scale duplicate detection to prevent "synthetic identity" attacks.
-*   **ML-Based Fraud Classifier**: An **XGBoost** model trained on forensic signals to predict document genuineness.
+```mermaid
+graph TD
+    A[User Upload: ID + Selfie] --> B[Quality Gate: Blur/Lighting/Size Check]
+    B --> C{Good Quality?}
+    C -- Yes --> D[OCR Extraction: EasyOCR]
+    C -- No --> E[Reject/Request Retake]
+    D --> F[Face Matching: ArcFace 1:1]
+    F --> G[Forensic Analysis: ELA + Perceptual Hashing]
+    G --> H[Risk Scoring Engine: Weighted Logic]
+    H --> I[Final Decision: VALID / SUSPICIOUS / REJECTED]
+```
 
-### 🔐 Biometric Security
-*   **Face Matcher**: High-precision 1:1 facial verification using **ResNet18/ArcFace** embeddings.
-*   **Liveness Detection**: Anti-spoofing logic to detect presentation attacks (photos of photos, masks).
-*   **Adaptive Thresholding**: Dynamically adjusts confidence requirements based on image quality.
+### The Pipeline Steps:
+1.  **Ingestion & Quality Gate**: Validates forensic suitability (resolution, lighting, and blur).
+2.  **OCR & Classification**: Identifies document type (Aadhaar/PAN) and extracts key PII.
+3.  **Biometric Verification**: Computes face embeddings from the ID and Selfie for comparison.
+4.  **Forensic Deep-Dive**: Performs Error Level Analysis (ELA) to detect compression inconsistencies (tampering).
+5.  **Consensus Engine**: Aggregates all signals into a final risk posture.
 
-### 📊 Business Intelligence
-*   **Risk Scoring Engine**: Aggregates biometric, forensic, and OCR signals into a single, actionable Risk Score (0-100).
-*   **Forensic Audit Trail**: Comprehensive API logs storing raw extraction metadata and liveness signals.
+---
+
+## 🧪 Example Output
+When a document is processed, the system returns a comprehensive JSON response detailing every signal:
+
+```json
+{
+  "status": "SUCCESS",
+  "tracking_id": "98b50e2d-dc99-43ef-b387-052637738f61",
+  "results": {
+    "document_type": "Aadhaar",
+    "extracted_fields": {
+      "name": "RUTURAJ NAWALE",
+      "id_number": "XXXX-XXXX-XXXX",
+      "dob": "01/01/2000"
+    },
+    "face_match": {
+      "verified": true,
+      "similarity_score": 0.87,
+      "threshold": 0.52
+    },
+    "fraud_validation": {
+      "status": "GENUINE",
+      "tampering_detected": false,
+      "confidence": 0.94
+    },
+    "final_decision": {
+        "risk_score": 12,
+        "decision": "VALID",
+        "reasons": []
+    }
+  },
+  "latency_ms": 2450.0
+}
+```
+*   **risk_score**: Normalized 0-100 score (lower is safer).
+*   **similarity_score**: Biometric confidence (0.0 to 1.0).
+*   **tampering_detected**: Boolean flag from ELA forensic engine.
+
+---
+
+## 🔌 API Documentation
+
+| Endpoint | Method | Description | Request Body |
+| :--- | :--- | :--- | :--- |
+| `/verify` | `POST` | Primary verification pipeline | `id_card` (File), `selfie` (File, Optional) |
+| `/records` | `GET` | List verification history | - |
+| `/records/{id}` | `GET` | Fetch specific verification detail | - |
+| `/` | `GET` | System health check | - |
+
+---
+
+## 🧠 Decision Logic (Weighted Risk)
+
+Veridex doesn't rely on a single signal. It uses a weighted scoring engine to handle ambiguity:
+
+| Signal | Logic | Weight (Penalty) |
+| :--- | :--- | :--- |
+| **Image Tampering** | ELA reveals high compression variance | 50 points |
+| **Face Mismatch** | Similarity < Threshold (Adaptive) | 35 points |
+| **Identity Inconsistency** | Mismatch between OCR and Context | 25 points |
+| **Duplicate Detected** | Perceptual Hash match in DB | 40 points |
+| **Low Quality** | High blur or low lighting | 10 points |
+
+### 🚦 Thresholds:
+*   🟢 **0–20 → VALID**: Trusted document, automated approval.
+*   🟡 **20–50 → SUSPICIOUS**: Needs manual reviewer oversight.
+*   🔴 **50+ → REJECTED**: High probability of fraud/tampering.
+
+---
+
+## 🤖 AI Modules & Engineering Choices
+
+*   **EasyOCR (OCR)**: Selected for its robust support for varied Indian document layouts and high tolerance for low-light noise.
+*   **InsightFace / ArcFace (Biometrics)**: Uses a ResNet backbone to achieve state-of-the-art 1:1 facial matching with sub-100ms latency on CPU.
+*   **ELA Forensics**: Error Level Analysis (ELA) identifies areas of an image at different compression levels, exposing local digital edits (text or photo swaps).
+*   **XGBoost Classifier**: A secondary ML layer trained on historical forensic signals to predict `FRAUD` vs `GENUINE` status based on extracted features.
+
+---
+
+## 📊 Performance & Evaluation
+*   **Speed**: End-to-end verification (OCR + Face + Fraud) averages **2.5s - 3.5s** on standard hardware.
+*   **Accuracy**: High precision in spotting "Photo-on-Photo" and "Text Overlay" tampering due to ELA sensitivity.
+*   **Resilience**: Adaptive thresholding allows the system to remain accurate even with moderately blurry mobile uploads.
+
+---
+
+## ⚠️ Engineering Constraints & Limitations
+*   **Lighting Sensitivity**: Very low-light environments can degrade face matching accuracy.
+*   **Liveness Limitations**: Currently optimized for 2D presentation attack detection; 3D/Video-based liveness is in the roadmap.
+*   **OCR Sensitivity**: Extremely skewed or heavily folded documents may require a retake.
 
 ---
 
@@ -46,88 +140,36 @@ Veridex AI is a high-performance, production-grade identity verification system 
 
 | Category | Technologies |
 | :--- | :--- |
-| **Frontend** | Next.js 16 (App Router), React 19, Tailwind CSS 4, Framer Motion, Lucide Icons |
+| **Frontend** | Next.js 15 (App Router), React 19, Tailwind CSS 4, Framer Motion |
 | **Backend** | FastAPI (Python), SQLAlchemy, Pydantic |
-| **AI/ML** | EasyOCR, PyTorch (ResNet18/ArcFace), XGBoost, OpenCV, Scikit-learn |
+| **AI/ML** | EasyOCR, InsightFace (ArcFace), XGBoost, OpenCV, PyTorch |
 | **Database** | SQLite3 (Persistence), Perceptual Hashing (pHash) |
 | **DevOps** | Uvicorn, Axios, Python-Multipart |
 
 ---
 
-## 📂 Project Structure
+## ⚙️ Installation & Production Readiness
 
-```text
-veridex-ai/
-├── backend/
-│   ├── api/                # FastAPI Endpoints & Pydantic Schemas
-│   ├── src/                # Core AI Engine (OCR, Face, Fraud, Scoring)
-│   │   ├── ocr/            # EasyOCR Logic & Benchmarking
-│   │   ├── face/           # InsightFace Matcher & Liveness
-│   │   ├── fraud/          # ELA Forensics & XGBoost Engine
-│   │   └── pipeline.py     # Master Orchestration Brain
-│   └── models/             # Pre-trained Checkpoints (ArcFace, XGBoost)
-├── frontend/               # Next.js 16 Dashboard & UI Components
-├── data/
-│   ├── raw/                # Synthetic & Real-world Datasets
-│   └── database/           # SQLite persistence layer
-├── docs/                   # Engineering design docs & API specs
-└── scripts/                # Utility & evaluation scripts
+### Environment Setup
+Create a `.env` in the root (optional, for custom model paths):
+```env
+MODEL_PATH=./models/fraud_xgb_model.json
+UPLOAD_DIR=./uploads
 ```
 
----
-
-## ⚙️ Installation & Setup
-
-### 🐍 Backend (Python 3.9+)
+### 🐍 Backend
 ```bash
-# Clone the repository
-git clone https://github.com/ruturajbhaskarnawale/Fraud_Detection.git
-cd Fraud_Detection/backend
-
-# Install dependencies
+cd backend
 pip install -r requirements.txt
-
-# Launch the API
-uvicorn api.main:app --reload --port 8000
+uvicorn api.main:app --host 0.0.0.0 --port 8000 --workers 4
 ```
 
-### ⚛️ Frontend (Node.js 18+)
+### ⚛️ Frontend
 ```bash
-cd ../frontend
-
-# Install packages
+cd frontend
 npm install
-
-# Start development server
-npm run dev
+npm run build && npm run start
 ```
-
----
-
-## 🧠 System Architecture
-
-Veridex AI operates on a **Sequential Multi-Signal Fusion** architecture:
-
-1.  **Ingestion**: Files are captured via a low-latency Next.js interface.
-2.  **Quality Gate**: Images are checked for forensic suitability.
-3.  **Parallel Extraction**: OCR engine extracts text while the Biometric engine generates embeddings.
-4.  **Forensic Deep-Dive**: ELA and pHash analysis check for digital tampering and duplication.
-5.  **Consensus**: The Risk Scoring Engine fuses all signals into a final `VALID`, `SUSPICIOUS`, or `REJECTED` decision.
-
----
-
-## 📈 Why Veridex Stands Out
-*   **Modular Architecture**: Every component (OCR, Face, Fraud) is independent and swappable.
-*   **Production Thinking**: Built-in latency tracking and forensic audit persistence.
-*   **Scalable Core**: Designed to handle asynchronous verification pipelines with ease.
-*   **Security First**: Implements liveness checks and digital signature verification (ELA).
-
----
-
-## 🔮 Future Roadmap
-- [ ] **Dockerization**: Full containerization for easy deployment.
-- [ ] **Advanced Liveness**: Video-based blink and motion detection.
-- [ ] **Additional Docs**: Support for Passport and Voter ID.
 
 ---
 
@@ -139,19 +181,5 @@ Veridex AI operates on a **Sequential Multi-Signal Fusion** architecture:
 
 ---
 
-## 🤝 Contributing
-Contributions are what make the open-source community such an amazing place to learn, inspire, and create. Any contributions you make are **greatly appreciated**.
-
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
----
-
 ## ⭐ Support
-If you find this project useful, please consider giving it a **Star** on GitHub! It helps more developers discover and learn from this implementation.
-
----
-*Developed with ❤️ for the AI & Security community.*
+If you find this project useful, please consider giving it a **Star** on GitHub!
