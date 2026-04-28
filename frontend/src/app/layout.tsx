@@ -22,6 +22,8 @@ export const metadata: Metadata = {
   description: "Next-generation KYC and Identity Verification system powered by advanced AI and Computer Vision.",
 };
 
+import { SessionInitializer } from "@/components/SessionInitializer";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -30,7 +32,9 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} ${outfit.variable} antialiased`}>
       <body className="min-h-screen bg-slate-50 selection:bg-blue-100 selection:text-blue-900">
-        {children}
+        <SessionInitializer>
+          {children}
+        </SessionInitializer>
       </body>
     </html>
   );

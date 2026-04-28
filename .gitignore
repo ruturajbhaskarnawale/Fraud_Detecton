@@ -57,3 +57,17 @@ scripts/debug/
 .vscode/
 .idea/
 
+# Custom Additions
+Dataset/
+OUTPUT.txt
+backend_tree.txt
+frontend_tree.txt
+dbnet_error.txt
+train_log.txt
+*.log
+log
+debug_final.py
+scratch_test.py
+test_direct.py
+test_verify.py
+validate_system.py

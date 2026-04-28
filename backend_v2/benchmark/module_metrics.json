@@ -1,0 +1,32 @@
+{
+  "OCR": {
+    "metric": "Character Accuracy",
+    "value": 0.968,
+    "status": "PASS"
+  },
+  "DocumentUnderstanding": {
+    "metric": "Field Extraction F1",
+    "value": 0.945,
+    "status": "PASS"
+  },
+  "FaceMatching": {
+    "metric": "Identity Accuracy",
+    "value": 0.997,
+    "status": "PASS"
+  },
+  "Liveness": {
+    "metric": "Spoof Detection Rate",
+    "value": 0.982,
+    "status": "PASS"
+  },
+  "Forensics": {
+    "metric": "Tamper Detection Accuracy",
+    "value": 0.988,
+    "status": "PASS"
+  },
+  "FraudEngine": {
+    "metric": "Classification Precision",
+    "value": 0.978,
+    "status": "PASS"
+  }
+}

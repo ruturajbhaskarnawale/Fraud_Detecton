@@ -27,22 +27,19 @@ export default function Navbar({ variant = 'marketing' }: NavbarProps) {
   const navBg = useTransform(
     scrollY, 
     [0, 50], 
-    ["rgba(255, 255, 255, 0)", "rgba(255, 255, 255, 0.9)"]
+    ["rgba(2, 6, 23, 0)", "rgba(2, 6, 23, 0.9)"] // slate-950
   );
   
   const navBorder = useTransform(
     scrollY,
     [0, 50],
-    ["rgba(255, 255, 255, 0)", "rgba(226, 232, 240, 1)"]
+    ["rgba(30, 41, 59, 0)", "rgba(30, 41, 59, 1)"] // slate-800
   );
 
   return (
     <motion.nav 
       style={{ backgroundColor: navBg, borderColor: navBorder }}
-      className={cn(
-        "fixed top-0 w-full z-50 transition-all backdrop-blur-md border-b h-16 flex items-center",
-        !isMarketing && "bg-white border-slate-200"
-      )}
+      className="fixed top-0 w-full z-50 transition-all backdrop-blur-md border-b h-16 flex items-center bg-slate-950 border-slate-800"
     >
       <div className="max-w-7xl mx-auto px-6 lg:px-8 w-full">
         <div className="flex justify-between items-center">
@@ -55,7 +52,8 @@ export default function Navbar({ variant = 'marketing' }: NavbarProps) {
               height={28} 
               className="w-7 h-7 object-contain"
             />
-            <span className="text-xl font-black text-slate-900 tracking-tight italic text-white"><span className="text-blue-600">Veridex</span>
+            <span className="text-xl font-black tracking-tight italic text-white">
+              <span className="text-blue-500">Veridex</span>
             </span>
           </Link>
           
@@ -67,7 +65,7 @@ export default function Navbar({ variant = 'marketing' }: NavbarProps) {
                 href={link.href}
                 className={cn(
                   "text-sm font-semibold transition-colors",
-                  pathname === link.href ? "text-blue-600" : "text-slate-600 hover:text-slate-900"
+                  pathname === link.href ? "text-blue-500" : "text-slate-400 hover:text-white"
                 )}
               >
                 {link.name}
@@ -78,7 +76,7 @@ export default function Navbar({ variant = 'marketing' }: NavbarProps) {
                {isMarketing && (
                  <Link 
                    href="/verify" 
-                   className="bg-slate-900 text-white px-5 py-2 rounded-lg text-sm font-bold hover:bg-slate-800 transition-colors flex items-center gap-2 shadow-sm"
+                   className="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-bold hover:bg-blue-500 transition-colors flex items-center gap-2 shadow-[0_0_15px_rgba(37,99,235,0.4)]"
                  >
                    <span>Get Started</span>
                    <ArrowRight className="w-4 h-4" />

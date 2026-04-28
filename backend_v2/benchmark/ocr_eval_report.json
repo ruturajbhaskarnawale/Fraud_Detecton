@@ -1,0 +1,24 @@
+{
+  "timestamp": "2026-04-22T11:56:36.054907Z",
+  "model_status": "TRAINED_WEIGHTS",
+  "recognition": {
+    "samples_evaluated": 200,
+    "character_error_rate_pct": 100.0,
+    "word_error_rate_pct": 100.0,
+    "target_cer_pct": 3.0,
+    "target_wer_pct": 5.0,
+    "meets_target": false
+  },
+  "field_detection": {
+    "total_fields_evaluated": 223,
+    "detection_rate_pct": 0.0,
+    "target_pct": 95.0,
+    "meets_target": false
+  },
+  "latency_ms": {
+    "avg": 226.0,
+    "p99": 510.5,
+    "target_ms": 500
+  },
+  "notes": "Evaluation against trained weights."
+}

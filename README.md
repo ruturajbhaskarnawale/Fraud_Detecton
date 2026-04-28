@@ -159,16 +159,17 @@ UPLOAD_DIR=./uploads
 
 ### 🐍 Backend
 ```bash
-cd backend
+# From the root directory
 pip install -r requirements.txt
-uvicorn api.main:app --host 0.0.0.0 --port 8000 --workers 4
+$env:PYTHONPATH="."
+python backend_v2/api/main.py
 ```
 
 ### ⚛️ Frontend
 ```bash
 cd frontend
 npm install
-npm run build && npm run start
+npm run dev
 ```
 
 ---
@@ -183,3 +184,35 @@ npm run build && npm run start
 
 ## ⭐ Support
 If you find this project useful, please consider giving it a **Star** on GitHub!
+## Face Model Training
+```bash
+python backend_v2/train/train_face.py
+python backend_v2/train/benchmark_face.py
+```
+
+## Liveness Model Training
+```bash
+python backend_v2/train/train_liveness.py
+python backend_v2/train/benchmark_liveness.py
+```
+
+## Forensic Model Training
+```bash
+python backend_v2/train/train_forensic.py
+```
+
+## Fraud Model Training
+```bash
+python backend_v2/train/train_fraud.py
+```
+
+## Environment Variables
+```env
+DATABASE_URL=postgresql://jotex_user:Lucky%402005%2B@localhost:5432/jotex_db
+REDIS_URL=redis://localhost:6379/0
+```
+
+## Running the Backend
+```bash
+python -m uvicorn backend_v2.api.main:app --host 0.0.0.0 --port 8000
+```

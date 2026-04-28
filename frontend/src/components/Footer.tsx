@@ -4,7 +4,7 @@ import { ShieldCheck, ArrowRight } from 'lucide-react';
 
 export default function Footer() {
   return (
-    <footer className="relative bg-[#020617] pt-24 pb-16 px-6 overflow-hidden border-t border-white/5">
+    <footer className="relative bg-slate-950 pt-24 pb-16 px-6 overflow-hidden border-t border-slate-800">
       {/* Subtle glow background */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-px bg-gradient-to-r from-transparent via-blue-500/50 to-transparent" />
       
@@ -13,9 +13,9 @@ export default function Footer() {
          <div className="lg:col-span-2 space-y-6">
             <div className="flex items-center gap-2">
                <Image src="/logo2.png" alt="Veridex AI" width={32} height={32} className="w-8 h-8 object-contain" />
-               <span className="text-2xl font-black tracking-tighter italic text-white">Veridex<span className="text-blue-600 not-italic"></span></span>
+               <span className="text-2xl font-black tracking-tighter italic text-white">Veridex<span className="text-blue-500 not-italic">.</span></span>
             </div>
-            <p className="max-w-xs text-sm font-medium text-slate-500 leading-relaxed">
+            <p className="max-w-xs text-sm font-medium text-slate-400 leading-relaxed">
                Industrial-grade identity verification for high-stakes environments. Autonomy in trust, powered by forensics.
             </p>
          </div>
