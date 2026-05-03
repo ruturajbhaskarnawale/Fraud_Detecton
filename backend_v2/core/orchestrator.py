@@ -32,11 +32,13 @@ logger = logging.getLogger("orchestrator_v2")
 
 class PipelineOrchestrator:
     def __init__(self):
+        print("[ORCHESTRATOR] Initializing Phase 1 Modules...", flush=True)
         # Phase 1 Modules
         self.quality_gate = QualityGate()
         self.preprocessor = PreprocessingEngine()
         self.ocr_engine = OCREngine()
         
+        print("[ORCHESTRATOR] Initializing Phase 2 Modules...", flush=True)
         # Phase 2 Modules
         self.doc_classifier = DocumentClassifier()
         self.doc_understanding = DocUnderstandingService()
@@ -51,6 +53,7 @@ class PipelineOrchestrator:
         self.risk_engine = RiskScoringEngine()
         self.decision_engine = DecisionEngine()
         self.persistence = PersistenceService()
+        print("[ORCHESTRATOR] Initialization Complete.", flush=True)
 
 
 
@@ -64,6 +67,7 @@ class PipelineOrchestrator:
     def run_with_bundle(self, bundle: EvidenceBundle) -> PipelineResult:
         # 1. Initialize Persistence Session
         try:
+            print("[TRACE] Step 1: Persistence Session", flush=True)
             self.persistence.create_session({
                 "session_id": bundle.session_id,
                 "entity_id": bundle.entity_id,
@@ -81,6 +85,7 @@ class PipelineOrchestrator:
             })
             
             # 1b. Cache Session in Redis
+            print("[TRACE] Step 1b: Redis Cache", flush=True)
             try:
                 IntelligenceCache.cache_session(bundle.session_id, {
                     "entity_id": bundle.entity_id,
@@ -93,6 +98,7 @@ class PipelineOrchestrator:
             input_path = bundle.raw_input_path
             
             # 2. Quality Gate
+            print("[TRACE] Step 2: Quality Gate", flush=True)
             quality_res = self.quality_gate.analyze(input_path)
             bundle.quality_gate = quality_res
 
@@ -108,6 +114,7 @@ class PipelineOrchestrator:
                 return res
 
             # 3. Preprocessing
+            print("[TRACE] Step 3: Preprocessing", flush=True)
             if bundle.metadata.get("file_type") == "application/pdf":
                 prep_res = self.preprocessor.process_pdf(input_path, quality_res)
             else:
@@ -118,25 +125,30 @@ class PipelineOrchestrator:
             primary_image = normalized_paths[0]
 
             # 4. OCR & Classification
+            print("[TRACE] Step 4: OCR", flush=True)
             ocr_result = self.ocr_engine.extract_text(normalized_paths)
+            print("[TRACE] Step 4b: Classification", flush=True)
             classifier_res = self.doc_classifier.predict(primary_image)
             bundle.doc_type = classifier_res["document_type"]
 
             # 5. Routing & Understanding
+            print("[TRACE] Step 5: Routing & Understanding", flush=True)
             route_info = self.routing_engine.route(bundle, quality_res, prep_res, ocr_result.get("confidence", 0.0))
             doc_res = self.doc_understanding.extract(primary_image, ocr_result, bundle.doc_type)
 
             # 6. Specialized Processing
-            forensic_res = {"tamper_score": 0.0, "flags": {}}
-            if route_info.get("forensic_required", False):
-                forensic_res = self.forensic_service.analyze(primary_image, ocr_result, bundle.metadata)
+            print("[TRACE] Step 6: Forensics", flush=True)
+            forensic_res = self.forensic_service.analyze(primary_image, ocr_result, bundle.metadata)
 
+            print("[TRACE] Step 6b: Metadata Engine", flush=True)
             metadata_res = self.metadata_engine.analyze(bundle.metadata)
 
-            biometrics_res = {"status": "ABSTAIN", "identity_score": 0.0, "liveness_score": 0.0, "flags": {}}
+            print("[TRACE] Step 6c: Biometrics", flush=True)
+            biometrics_res = {"status": "ABSTAIN", "identity_score": -1.0, "liveness_score": -1.0, "flags": {}}
             if bundle.selfie_path:
                 face_res = self.face_service.process(bundle.selfie_path, primary_image)
                 liveness_res = self.liveness_service.analyze(bundle.selfie_path, face_res)
+
                 biometrics_res = {
                     "status": face_res["status"],
                     "identity_score": face_res["identity_score"],
@@ -146,36 +158,48 @@ class PipelineOrchestrator:
 
             # 7. Intelligence Layer & Fraud Analysis
             intelligence_layer = {
-                "identity_score": biometrics_res.get("identity_score", 0.0),
-                "liveness_score": biometrics_res.get("liveness_score", 0.0),
+                "identity_score": biometrics_res.get("identity_score", -1.0),
+                "liveness_score": biometrics_res.get("liveness_score", -1.0),
                 "forensic_score": forensic_res.get("tamper_score", 0.0),
-                "document_score": doc_res.get("confidence", 0.0),
+                "document_score": ocr_result.get("confidence", 0.0),
+                "is_reliable": ocr_result.get("is_reliable", True),
                 "quality_score": quality_res.quality_score,
                 "geo_risk": metadata_res["metadata_risk"]["geo_risk_score"],
                 "device_risk": metadata_res["metadata_risk"]["device_risk_score"],
                 "session_risk": metadata_res["metadata_risk"]["session_risk_score"],
                 "ip_rep_risk": metadata_res["metadata_risk"]["ip_reputation_score"],
                 "metadata_flags": metadata_res["flags"],
-                "fused_features": metadata_res["metadata_risk"] # For RiskEngine mapping
+                "fused_features": metadata_res["metadata_risk"] 
             }
             
-            # Pass enriched intelligence to fraud engine
             fraud_res = self.fraud_engine.analyze(intelligence_layer, {**bundle.metadata, **intelligence_layer})
-            
             fusion_res = self.fusion_engine.fuse(intelligence_layer)
             risk_res = self.risk_engine.calculate(fusion_res, fraud_res)
-
             
             # 8. Final Decision
-            combined_flags = {**biometrics_res.get("flags", {}), **forensic_res.get("flags", {})}
-            decision_res = self.decision_engine.decide(risk_res, combined_flags)
+            def get_flag_dict(data, key):
+                val = data.get(key, {})
+                if isinstance(val, list):
+                    return {k: True for k in val}
+                return val if isinstance(val, dict) else {}
+
+            combined_flags = {
+                **get_flag_dict(biometrics_res, "flags"), 
+                **get_flag_dict(forensic_res, "flags"),
+                **get_flag_dict(ocr_result, "quality_flags"),
+                "tampered": forensic_res.get("is_altered", False)
+            }
+            decision_res = self.decision_engine.decide(risk_res, combined_flags, intelligence_layer)
 
             # 9. Result Construction
             final_result = PipelineResult(
                 session_id=bundle.session_id,
+                tracking_id=bundle.session_id,
                 entity_id=bundle.entity_id,
                 decision=decision_res["decision"],
-                confidence_score=decision_res["confidence"],
+                risk_score=decision_res["risk_score"],
+                confidence_score=decision_res["confidence_score"],
+                rules_triggered=decision_res["rules_triggered"],
                 explanation=decision_res["explanation"],
                 ocr=OCRData(text=ocr_result["text"], confidence=ocr_result.get("confidence", 0.0)),
                 document=DocumentData(
@@ -184,15 +208,15 @@ class PipelineOrchestrator:
                     confidence=doc_res.get("confidence", 0.0)
                 ),
                 biometrics=BiometricData(
-                    face_similarity=biometrics_res.get("identity_score", 0.0),
-                    liveness_score=biometrics_res.get("liveness_score", 0.0),
+                    face_similarity=max(0.0, biometrics_res.get("identity_score", 0.0)),
+                    liveness_score=max(0.0, biometrics_res.get("liveness_score", 0.0)),
                     status=biometrics_res["status"],
-                    flags=list(biometrics_res.get("flags", {}).keys())
+                    flags=[k for k, v in biometrics_res.get("flags", {}).items() if v]
                 ),
                 forensics=ForensicData(
                     tamper_score=forensic_res.get("tamper_score", 0.0),
-                    is_altered=forensic_res.get("tamper_score", 0.0) > 0.5,
-                    forgery_flags=list(forensic_res.get("flags", {}).keys())
+                    is_altered=forensic_res.get("is_altered", False),
+                    forgery_flags=[k for k, v in forensic_res.get("flags", {}).items() if v]
                 ),
                 metadata=MetadataData(
                     ip_risk=metadata_res["metadata_risk"]["ip_reputation_score"],
@@ -222,6 +246,9 @@ class PipelineOrchestrator:
                 session_id=bundle.session_id,
                 module_outputs=final_result.model_dump(mode='json')
             )
+            self.persistence.save_artifact(bundle.session_id, "id_card", bundle.raw_input_path)
+            if bundle.selfie_path:
+                self.persistence.save_artifact(bundle.session_id, "selfie", bundle.selfie_path)
             self.persistence.save_module_results(bundle.session_id, final_result.model_dump(mode='json'))
             self.persistence.log_audit(bundle.session_id, "COMPLETE_PIPELINE", {"decision": str(final_result.decision.value)})
 

@@ -8,53 +8,82 @@ class DecisionEngine:
     def __init__(self):
         self.version = "v1.0"
 
-    def decide(self, risk_res: Dict[str, Any], flags: Dict[str, Any]) -> Dict[str, Any]:
+    def decide(self, risk_res: Dict[str, Any], flags: Dict[str, Any], intelligence: Dict[str, Any] = None) -> Dict[str, Any]:
         """
-        Generates the final terminal decision and reason codes.
+        Generates the final terminal decision with hard overrides and strict thresholds.
         """
         risk_score = risk_res.get("risk_score", 0.0)
         confidence = risk_res.get("confidence", 1.0)
+        intelligence = intelligence or {}
+        breakdown = risk_res.get("breakdown", {})
         
-        reasons = []
+        identity_score = intelligence.get("identity_score", -1.0)
+        liveness_score = intelligence.get("liveness_score", -1.0)
+        forensic_score = intelligence.get("forensic_score", 0.0)
+        document_score = intelligence.get("document_score", 0.0)
+        fraud_score = breakdown.get("fraud", 0.0)
         
-        # 1. Terminal Security Blocks (Hard Rules)
-        if flags.get("spoof_detected") or flags.get("deepfake_detected"):
-            reasons.append("REJ_BIOMETRIC_SPOOF")
-        if flags.get("tampered") or flags.get("copy_move_detected"):
-            reasons.append("REJ_DOCUMENT_TAMPER")
-        if flags.get("text_tamper_detected"):
-            reasons.append("REJ_TEXT_ALTERATION")
+        rules_triggered = []
+        
+        # 1. MANDATORY HARD REJECTS (Identity & Safety)
+        
+        # 1a. Biometric Failures
+        if flags.get("BIOMETRIC_MISSING") or identity_score == -1.0:
+            rules_triggered.append("REJ_BIOMETRIC_BYPASS_ATTEMPT")
             
-        # 1b. Metadata Security Blocks
-        if "VPN_DETECTED" in flags.get("metadata_flags", []) and risk_score > 0.6:
-            reasons.append("REJ_VPN_HIGH_RISK")
-        if "HIGH_DEVICE_VELOCITY" in flags.get("metadata_flags", []) and risk_score > 0.5:
-            reasons.append("REJ_VELOCITY_ABUSE")
+        if identity_score >= 0.0 and identity_score < 0.45:
+            rules_triggered.append("REJ_IDENTITY_MISMATCH")
             
-        if reasons:
-            return self._finalize("REJECT", reasons, risk_score, confidence)
+        if liveness_score >= 0.0 and liveness_score < 0.3:
+            rules_triggered.append("REJ_LIVENESS_FAILURE")
+            
+        if flags.get("INVALID_FACE_EMBEDDING"):
+            rules_triggered.append("REJ_INVALID_FACE_EMBEDDING")
 
-        # 2. Incompleteness Blocks (Abstain)
-        if flags.get("no_face"):
-            return self._finalize("ABSTAIN", ["ABS_FACE_NOT_DETECTED"], risk_score, confidence)
-        if flags.get("low_quality_face") and confidence < 0.4:
-            return self._finalize("ABSTAIN", ["ABS_IMAGE_QUALITY_LOW"], risk_score, confidence)
+        # 1b. Tamper & Fraud
+        if forensic_score > 0.6 or flags.get("tampered"):
+            rules_triggered.append("REJ_TAMPER_DETECTED")
+            
+        if fraud_score > 0.85:
+            rules_triggered.append("REJ_CRITICAL_FRAUD_SIGNAL")
 
-        # 3. Threshold Decisions
-        if risk_score > 0.70:
-            return self._finalize("REJECT", ["REJ_HIGH_RISK_SCORE"], risk_score, confidence)
-        
-        if risk_score > 0.40 or confidence < 0.60:
-            return self._finalize("REVIEW", ["REV_MANUAL_AUDIT_REQUIRED"], risk_score, confidence)
+        # 1c. Document Reliability
+        if not intelligence.get("is_reliable", True) and document_score < 0.3:
+            rules_triggered.append("REJ_UNRELIABLE_OCR")
 
-        # 4. Success Path
-        return self._finalize("ACCEPT", ["ACC_SYSTEM_PASS"], risk_score, confidence)
+        if rules_triggered:
+            return self._finalize("REJECT", rules_triggered, risk_score, confidence, breakdown)
 
-    def _finalize(self, decision: str, reason_codes: List[str], risk: float, conf: float) -> Dict[str, Any]:
+        # 2. ABSTAIN / REVIEW (Uncertainty)
+        if flags.get("no_face") or flags.get("ID_FACE_MISSING"):
+            return self._finalize("ABSTAIN", ["ABS_MISSING_VISUAL_SIGNALS"], risk_score, confidence, breakdown)
+            
+        if risk_score > 0.7:
+            return self._finalize("REJECT", ["REJ_HIGH_RISK_SCORE"], risk_score, confidence, breakdown)
+
+        # 3. FORCE ACCEPT (Strong Evidence)
+        if (identity_score > 0.8 and 
+            liveness_score > 0.75 and 
+            forensic_score < 0.2 and 
+            document_score > 0.75 and
+            fraud_score < 0.2):
+            return self._finalize("ACCEPT", ["ACC_STRONG_EVIDENCE_OVERRIDE"], risk_score, confidence, breakdown)
+
+        # 4. DETERMINISTIC THRESHOLD LOGIC
+        if risk_score < 0.35:
+            # Final check for any negative flags
+            if any([flags.get("multiple_faces"), flags.get("low_quality_face"), flags.get("uncertain_liveness")]):
+                return self._finalize("REVIEW", ["REV_UNCERTAIN_SIGNAL_QUALTIY"], risk_score, confidence, breakdown)
+            return self._finalize("ACCEPT", ["ACC_SYSTEM_PASS"], risk_score, confidence, breakdown)
+
+        return self._finalize("REVIEW", ["REV_MANUAL_AUDIT_REQUIRED"], risk_score, confidence, breakdown)
+
+    def _finalize(self, decision: str, rules: List[str], risk: float, conf: float, breakdown: Dict = None) -> Dict[str, Any]:
         return {
             "decision": decision,
-            "reason_codes": reason_codes,
-            "confidence": round(conf, 4),
             "risk_score": round(risk, 4),
-            "explanation": f"Decision {decision} reached via {len(reason_codes)} triggers. Primary: {reason_codes[0] if reason_codes else 'N/A'}"
+            "confidence_score": round(conf, 4),
+            "breakdown": breakdown or {},
+            "rules_triggered": rules,
+            "explanation": f"Decision {decision} reached. Primary Trigger: {rules[0] if rules else 'THRESHOLD'}"
         }

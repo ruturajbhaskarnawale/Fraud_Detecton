@@ -17,7 +17,9 @@ import {
   Layers,
   CheckCircle2,
   AlertCircle,
-  Play
+  Play,
+  Terminal,
+  ShieldAlert
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
@@ -35,36 +37,41 @@ export default function LandingPage() {
   const opacity = useTransform(scrollYProgress, [0, 0.5], [1, 0]);
 
   return (
-    <div ref={containerRef} className="flex flex-col relative text-white bg-slate-950 min-h-screen selection:bg-blue-500/30">
+    <div ref={containerRef} className="flex flex-col relative text-foreground bg-background min-h-screen selection:bg-blue-500/30">
       
       {/* Background Ambience */}
       <div className="fixed inset-0 z-0 pointer-events-none">
          <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-600/10 blur-[120px] rounded-full" />
          <div className="absolute bottom-[-10%] right-[-5%] w-[40%] h-[40%] bg-emerald-600/10 blur-[100px] rounded-full" />
          <div className="absolute top-[40%] left-[60%] w-[30%] h-[30%] bg-rose-600/5 blur-[120px] rounded-full" />
-         <div className="absolute inset-0 bg-[url('/noise.png')] opacity-[0.03] mix-blend-overlay" />
+         <HeroGlow />
       </div>
 
+      {/* Scroll Progress Bar */}
+      <motion.div 
+        className="fixed top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-emerald-500 z-[110] origin-left"
+        style={{ scaleX: scrollYProgress }}
+      />
+
       {/* Hero Section */}
-      <section className="relative min-h-screen flex items-center justify-center pt-32 pb-32 px-6 overflow-hidden z-10">
-        <div className="max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-2 gap-20 items-center">
+      <section className="relative min-h-[90vh] flex items-center justify-center pt-32 pb-20 px-6 overflow-hidden z-10">
+        <div className="max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
           
-          {/* Left Column: Messaging */}
           <motion.div 
             style={{ y: textY, opacity }}
-            className="space-y-10 text-center lg:text-left relative z-20"
+            className="space-y-8 text-center lg:text-left relative z-20"
           >
             <motion.div 
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-900/20 text-blue-400 text-[10px] font-black tracking-[0.2em] uppercase border border-blue-500/20 backdrop-blur-md"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-500/10 text-blue-500 text-[10px] font-black tracking-[0.2em] uppercase border border-blue-500/20 backdrop-blur-md"
             >
               <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(59,130,246,0.8)]" />
               <span>Veridex Engine V4 Active</span>
             </motion.div>
             
             <div className="space-y-4">
-              <h1 className="text-6xl md:text-8xl font-black tracking-tighter text-white leading-[0.85] perspective drop-shadow-2xl">
+              <h1 className="text-5xl md:text-7xl font-black tracking-tighter text-foreground leading-[1.1] perspective drop-shadow-2xl">
                 <AnimatedText text="Identity Infrastructure." className="block" />
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400 block relative py-2">
                    <AnimatedText text="For the AI Era." delay={0.5} />
@@ -76,9 +83,9 @@ export default function LandingPage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 1.2 }}
-              className="max-w-xl mx-auto lg:mx-0 text-lg text-slate-400 font-medium leading-relaxed"
+              className="max-w-xl mx-auto lg:mx-0 text-lg text-muted-foreground font-medium leading-relaxed"
             >
-              Military-grade document parsing, biometric fusion, and forgery detection. Verify global identity records with sub-pixel precision and cryptographic certainty in under 500ms.
+              Military-grade document parsing, biometric fusion, and forgery detection. Verify global identity records with sub-pixel precision in under 500ms.
             </motion.p>
 
             <motion.div 
@@ -90,16 +97,16 @@ export default function LandingPage() {
               <MagneticButton>
                 <Link 
                   href="/verify" 
-                  className="px-8 py-5 bg-blue-600 text-white rounded-2xl font-bold text-lg hover:bg-blue-500 transition-all flex items-center justify-center gap-3 shadow-[0_0_40px_-10px_rgba(37,99,235,0.5)] group relative overflow-hidden"
+                  className="px-8 py-4 bg-blue-600 text-white rounded-2xl font-bold text-lg hover:bg-blue-500 transition-all flex items-center justify-center gap-3 shadow-[0_0_40px_-10px_rgba(37,99,235,0.5)] group relative overflow-hidden"
                 >
-                  <span className="relative z-10">Start Verification Demo</span>
+                  <span className="relative z-10">Start Verification</span>
                   <Play className="w-4 h-4 fill-current relative z-10 group-hover:translate-x-1 transition-transform" />
                   <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-blue-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </Link>
               </MagneticButton>
               <Link 
                 href="/dashboard" 
-                className="px-8 py-5 bg-slate-900/50 text-white border border-slate-700 backdrop-blur-md rounded-2xl font-bold text-lg hover:bg-slate-800 transition-all flex items-center justify-center gap-2"
+                className="px-8 py-4 bg-secondary text-foreground border border-border backdrop-blur-md rounded-2xl font-bold text-lg hover:bg-accent hover:text-white transition-all flex items-center justify-center gap-2"
               >
                 Developer API
               </Link>
@@ -110,34 +117,57 @@ export default function LandingPage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 1.8 }}
-              className="pt-8 flex flex-wrap justify-center lg:justify-start items-center gap-8 border-t border-slate-800"
+              className="pt-8 flex flex-wrap justify-center lg:justify-start items-center gap-8 border-t border-border"
             >
                <div className="flex flex-col">
-                  <span className="text-2xl font-black text-white tracking-tighter">99.98%</span>
-                  <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">Accuracy Level</span>
+                  <span className="text-2xl font-black text-foreground tracking-tighter">99.98%</span>
+                  <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Accuracy</span>
                </div>
-               <div className="w-px h-8 bg-slate-800 hidden sm:block" />
+               <div className="w-px h-8 bg-border hidden sm:block" />
                <div className="flex flex-col">
-                  <span className="text-2xl font-black text-white tracking-tighter">42ms</span>
-                  <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">Avg Latency</span>
+                  <span className="text-2xl font-black text-foreground tracking-tighter">42ms</span>
+                  <span className="text-[10px] font-bold text-blue-500 uppercase tracking-widest">Latency</span>
                </div>
-               <div className="w-px h-8 bg-slate-800 hidden sm:block" />
+               <div className="w-px h-8 bg-border hidden sm:block" />
                <div className="flex flex-col">
-                  <span className="text-2xl font-black text-white tracking-tighter">150+</span>
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Global IDs</span>
+                  <span className="text-2xl font-black text-foreground tracking-tighter">150+</span>
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Global IDs</span>
                </div>
             </motion.div>
           </motion.div>
 
           {/* Right Column: Forensic Console Visual */}
-          <div className="hidden lg:block relative perspective h-[600px] z-20">
+          <div className="hidden lg:block relative h-[600px] z-20">
+             <div className="absolute inset-0 bg-blue-500/5 blur-3xl rounded-full" />
              <ForensicConsole />
           </div>
         </div>
       </section>
 
+      {/* Partners / Trust Section */}
+      <section className="relative py-20 px-6 z-10 border-t border-border bg-background">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          className="max-w-7xl mx-auto w-full"
+        >
+           <p className="text-center text-[10px] font-black text-muted-foreground uppercase tracking-[0.4em] mb-12">
+             Trusted by global security leaders
+           </p>
+           <div className="flex flex-wrap justify-center items-center gap-12 md:gap-24 opacity-30 grayscale hover:grayscale-0 transition-all duration-700">
+              {['FORTRESS', 'QUANTUM', 'SECURE_X', 'CYBER_CORE', 'DATA_SHIELD'].map((partner) => (
+                <div key={partner} className="text-2xl font-black tracking-tighter text-foreground font-outfit italic flex items-center gap-2">
+                   <div className="w-6 h-6 bg-foreground/20 rounded-lg" />
+                   {partner}
+                </div>
+              ))}
+           </div>
+        </motion.div>
+      </section>
+
       {/* Product Roadmap / How it Works */}
-      <section className="py-32 px-6 relative z-10 border-t border-slate-800/50 bg-slate-950/50 backdrop-blur-3xl">
+      <section className="py-32 px-6 relative z-10 border-t border-border bg-background/50 backdrop-blur-3xl">
         <div className="max-w-7xl mx-auto space-y-24">
           <motion.div 
             initial={{ opacity: 0, y: 30 }}
@@ -145,12 +175,12 @@ export default function LandingPage() {
             viewport={{ once: true }}
             className="text-center space-y-6"
           >
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-slate-900 rounded-full text-[10px] font-black tracking-widest text-slate-400 uppercase border border-slate-800">
+            <div className="inline-flex items-center gap-2 px-3 py-1 bg-secondary rounded-full text-[10px] font-black tracking-widest text-muted-foreground uppercase border border-border">
                <Activity className="w-3 h-3 text-emerald-500" />
                The Verification Pipeline
             </div>
-            <h2 className="text-5xl md:text-7xl font-black tracking-tighter">Intelligent <span className="text-blue-500">Forensics.</span></h2>
-            <p className="text-slate-400 max-w-2xl mx-auto font-medium text-lg">From sub-pixel OCR extraction to encrypted decision logic, our pipeline is built for high-stakes reliability.</p>
+            <h2 className="text-5xl md:text-7xl font-black tracking-tighter text-foreground">Intelligent <span className="text-blue-500">Forensics.</span></h2>
+            <p className="text-muted-foreground max-w-2xl mx-auto font-medium text-lg">From sub-pixel OCR extraction to encrypted decision logic, our pipeline is built for high-stakes reliability.</p>
           </motion.div>
 
           {/* Featured Cards */}
@@ -159,47 +189,48 @@ export default function LandingPage() {
                title="Neural OCR"
                desc="Advanced text extraction that detects font manipulation, field displacement, and MRZ irregularities with industrial precision."
                icon={<SearchCode className="w-8 h-8" />}
-               color="blue"
              />
              <StandardCard 
-                title="Biometric Sync"
-                desc="Map 68 vector points on facial records to ensure 1:1 match across various document types, defeating high-res print attacks."
-                icon={<Fingerprint className="w-8 h-8" />}
-                color="emerald"
-                active
+               title="Biometric Fusion"
+               desc="Multi-spectral face mapping and liveness checks that defeat high-fidelity deepfakes and physical mask presentations."
+               icon={<ShieldAlert className="w-8 h-8" />}
              />
              <StandardCard 
-                title="Cryptic Ledger"
-                desc="Every verification result is hashed and signed, ensuring a permanent, tamper-proof audit trail for regulatory compliance."
-                icon={<Lock className="w-8 h-8" />}
-                color="rose"
+               title="Risk Engine"
+               desc="Real-time behavioral scoring that cross-references 500+ fraud signals to provide an instant, verifiable trust index."
+               icon={<Fingerprint className="w-8 h-8" />}
              />
           </div>
         </div>
       </section>
 
-      {/* Interactive Demo Section */}
-      <section className="py-32 px-6 relative z-10 border-t border-slate-800">
-        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-20 items-center">
+      {/* API / Developer Section */}
+      <section className="py-32 px-6 relative z-10 border-t border-border bg-background">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-24 items-center">
            <div className="space-y-8">
-              <h2 className="text-5xl md:text-7xl font-black tracking-tighter leading-none">Trust, but <br/><span className="text-emerald-500">verify.</span></h2>
-              <p className="text-xl text-slate-400 font-medium leading-relaxed">Veridex AI is the preferred security partner for high-volume Fintech and identity-first platforms worldwide.</p>
+              <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-500/10 rounded-full text-[10px] font-black tracking-widest text-blue-500 uppercase border border-blue-500/20">
+                 <Terminal className="w-3 h-3" />
+                 Built for Developers
+              </div>
+              <h2 className="text-5xl md:text-6xl font-black tracking-tighter text-foreground leading-tight">Scale your security <br /><span className="text-blue-500 italic">programmatically.</span></h2>
+              <p className="text-xl text-muted-foreground font-medium leading-relaxed">Veridex AI is the preferred security partner for high-volume Fintech and identity-first platforms worldwide.</p>
               
-              <div className="space-y-6 pt-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-8">
                  {[
-                   { title: 'Zero-Latency Integration', desc: 'Deploy via our REST API in minutes, not months.' },
-                   { title: 'Deepfake Detection Ready', desc: 'Liveness checks that defeat masks, screens, and AI-generated faces.' },
-                   { title: 'SOC2 & GDPR Compliant', desc: 'Enterprise-grade security architecture protecting PII data.' }
-                 ].map((f, i) => (
-                   <div key={i} className="flex gap-4">
-                      <div className="w-10 h-10 mt-1 bg-slate-900 border border-slate-800 text-emerald-500 rounded-xl flex items-center justify-center flex-shrink-0">
-                         <CheckCircle2 className="w-5 h-5" />
-                      </div>
-                      <div>
-                         <h4 className="font-bold text-lg tracking-tight text-white">{f.title}</h4>
-                         <p className="text-slate-500 font-medium">{f.desc}</p>
-                      </div>
-                   </div>
+                   { title: "Universal SDK", desc: "Native support for iOS, Android, and Web." },
+                   { title: "99.9% Uptime", desc: "Reliability you can bank on." },
+                   { title: "Webhooks", desc: "Real-time verification event streaming." },
+                   { title: "SOC2 Type II", desc: "Hardened security compliance." }
+                 ].map((f) => (
+                    <div key={f.title} className="flex gap-4 p-4 rounded-2xl bg-secondary/50 border border-border">
+                       <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-500">
+                          <CheckCircle2 className="w-5 h-5" />
+                       </div>
+                       <div>
+                          <h4 className="font-bold text-lg tracking-tight text-foreground">{f.title}</h4>
+                          <p className="text-muted-foreground font-medium text-sm">{f.desc}</p>
+                       </div>
+                    </div>
                  ))}
               </div>
            </div>
@@ -515,4 +546,32 @@ function MagneticButton({ children }: { children: React.ReactNode }) {
     y.set((e.clientY - (rect.top + rect.height / 2)) * 0.3);
   };
   return <motion.div style={{ x: springX, y: springY }} onMouseMove={handleMouseMove} onMouseLeave={() => { x.set(0); y.set(0); }}>{children}</motion.div>;
+}
+
+function HeroGlow() {
+  const mouseX = useMotionValue(0);
+  const mouseY = useMotionValue(0);
+  const springX = useSpring(mouseX, { stiffness: 50, damping: 20 });
+  const springY = useSpring(mouseY, { stiffness: 50, damping: 20 });
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      mouseX.set(e.clientX);
+      mouseY.set(e.clientY);
+    };
+    window.addEventListener("mousemove", handleMouseMove);
+    return () => window.removeEventListener("mousemove", handleMouseMove);
+  }, [mouseX, mouseY]);
+
+  return (
+    <motion.div 
+      style={{ 
+        left: springX, 
+        top: springY,
+        translateX: '-50%',
+        translateY: '-50%'
+      }}
+      className="fixed w-[600px] h-[600px] bg-blue-600/10 blur-[120px] rounded-full pointer-events-none z-0"
+    />
+  );
 }

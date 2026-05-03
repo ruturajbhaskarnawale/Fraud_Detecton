@@ -1,100 +1,90 @@
-import numpy as np
+import joblib
+import os
 import logging
-from typing import Dict, Any, List, Optional, Tuple
+import numpy as np
+from typing import Dict, Any, List, Optional
+from backend_v2.modules.fraud.feature_builder import FeatureBuilder
 
 logger = logging.getLogger("fraud_engine_v2")
 
 class FraudEngine:
     def __init__(self):
-        self.decay_factor = 30 # days
-        self.drift_threshold = 0.15
-        self.model_version = "Veridex-Fraud-v3.0"
+        self.feature_builder = FeatureBuilder()
+        self.model_path = "backend_v2/models/weights/fraud/fraud_xgb_v1.pkl"
+        self.model = None
+        self.version = "v3.1-ML"
+        self._load_model()
+
+    def _load_model(self):
+        if os.path.exists(self.model_path):
+            try:
+                self.model = joblib.load(self.model_path)
+                logger.info(f"Loaded Fraud XGBoost model from {self.model_path}")
+            except Exception as e:
+                logger.error(f"Failed to load fraud model: {e}")
+        else:
+            logger.warning("Fraud model not found. Using fallback heuristics.")
 
     def analyze(self, intelligence_data: Dict[str, Any], metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
-        Refined Fraud Analysis with score calibration and uncertainty estimation.
+        Production-grade Fraud Analysis using ML Inference + Rule Safeguards.
         """
         meta = metadata or {}
         
-        # 1. Score Calibration (MANDATORY)
-        # Calibrates raw signals into probabilistic space
-        calibrated = self._calibrate_signals(intelligence_data)
+        # 1. Feature Engineering
+        feature_vector = self.feature_builder.build_vector(intelligence_data, meta)
         
-        # 2. Deep Feature Engineering
-        # Derived features: gaps, density, velocity
-        derived = self._engineer_features(calibrated, meta)
-        
-        # 3. Uncertainty Estimation
-        # variance across signals
-        uncertainty = self._estimate_uncertainty(calibrated, derived)
-        
-        # 4. Tabular & Graph Aggregation
-        tabular_score = derived["tabular_risk"]
-        graph_score = derived["graph_risk"]
-        
-        # 5. Tiered Rule Engine
-        rule_factors = self._run_tiered_rules(calibrated, meta)
+        # 2. ML Inference
+        fraud_score = 0.0
+        if self.model:
+            try:
+                # Expecting 2D array for XGBoost
+                fraud_score = float(self.model.predict_proba(feature_vector.reshape(1, -1))[0][1])
+            except Exception as e:
+                logger.error(f"Inference failed: {e}")
+                fraud_score = self._fallback_heuristic(intelligence_data, meta)
+        else:
+            # Fallback heuristic if no model
+            fraud_score = self._fallback_heuristic(intelligence_data, meta)
+
+        # 3. Rule Engine (Safety Layer)
+        rule_factors = self._run_tiered_rules(intelligence_data, meta)
         rule_penalty = sum(f["impact"] for f in rule_factors)
 
-        # 6. Final Fused Score
-        final_score = self._fuse_signals(tabular_score, graph_score, rule_penalty)
+        # 4. Hybrid Fusion
+        # Rules can only increase the risk
+        final_score = min(fraud_score + rule_penalty, 1.0)
+
+        # 5. Explainability (Feature Importance Mapping)
+        feature_contributions = self._get_feature_contributions(feature_vector)
 
         return {
-            "fraud_score": round(tabular_score, 4),
-            "graph_risk_score": round(graph_score, 4),
-            "rule_flags": [f["description"] for f in rule_factors],
-            "final_score": round(min(final_score, 1.0), 4),
-            "uncertainty": round(uncertainty, 4),
-            "decision_hint": self._get_risk_hint(final_score),
-            "explanation": {
-                "risk_factors": rule_factors
-            },
-            "model_version": self.model_version
+            "fraud_score": round(fraud_score, 4),
+            "final_score": round(final_score, 4),
+            "is_fraudulent": final_score > 0.7,
+            "rules_triggered": [f["description"] for f in rule_factors],
+            "feature_contributions": feature_contributions,
+            "model_version": self.version,
+            "decision_hint": "REJECT" if final_score > 0.7 else "REVIEW" if final_score > 0.4 else "PASS"
         }
 
-    def _calibrate_signals(self, data: Dict) -> Dict[str, float]:
-        """
-        Simulated Platt scaling (Sigmoid calibration).
-        """
-        calibrated = {}
-        for k, v in data.items():
-            if isinstance(v, (int, float)):
-                # Sigmoid calibration: 1 / (1 + exp(A*v + B))
-                calibrated[k] = 1.0 / (1.0 + np.exp(-10 * (v - 0.5)))
-        return calibrated
+    def _fallback_heuristic(self, intel: Dict, meta: Dict) -> float:
+        # Simple weighted sum of known risk factors
+        score = 0.0
+        if float(intel.get("forensic_score", 0)) > 0.6: score += 0.5
+        if meta.get("ip_address") == "vpn_detected": score += 0.3
+        return min(score, 1.0)
 
-    def _engineer_features(self, calibrated: Dict, meta: Dict) -> Dict[str, float]:
-        doc = calibrated.get("document_score", 0.0)
-        forensic = calibrated.get("forensic_score", 0.0)
-        identity = calibrated.get("identity_score", 0.0)
-        
-        # Feature A: Document-Forensic Gap
-        # High gap = Clean forgery suspicion
-        score_gap_doc_forensic = abs(doc - (1.0 - forensic))
-        
-        # Feature B: Bio-Doc Gap
-        bio_doc_gap = abs(identity - doc)
-        
-        # Feature C: Risk Density
-        risk_density = (score_gap_doc_forensic + bio_doc_gap) / 2.0
+    def _get_feature_contributions(self, vector: np.ndarray) -> Dict[str, float]:
+        # In production, use SHAP. Here we provide a simplified mapping.
+        names = self.feature_builder.get_feature_names()
+        contributions = {}
+        for i, val in enumerate(vector):
+            if val > 0.5: # Simple heuristic for "significant" features
+                contributions[names[i]] = round(float(val), 2)
+        return contributions
 
-        # Feature D: Graph Risk (Simulated temporal weighting)
-        graph_risk = 0.05
-        if meta.get("ip_address") == "vpn_detected":
-            graph_risk = 0.85
-        
-        return {
-            "tabular_risk": risk_density,
-            "graph_risk": graph_risk,
-            "gap_df": score_gap_doc_forensic,
-            "gap_bd": bio_doc_gap
-        }
-
-    def _estimate_uncertainty(self, calibrated: Dict, derived: Dict) -> float:
-        signals = [v for k, v in calibrated.items()] + [derived["tabular_risk"]]
-        return float(np.var(signals))
-
-    def _run_tiered_rules(self, calibrated: Dict, meta: Dict) -> List[Dict]:
+    def _run_tiered_rules(self, intelligence: Dict, meta: Dict) -> List[Dict]:
         factors = []
         # High Severity
         if meta.get("device_id") == "BLOCKLISTED":
@@ -104,25 +94,11 @@ class FraudEngine:
         if meta.get("ip_location") != meta.get("resident_country"):
             factors.append({"type": "rule", "description": "GEO_MISMATCH", "impact": 0.4, "severity": "medium"})
             
-        # 1c. Velocity / Redis-backed Intelligence
-        if meta.get("device_risk", 0.0) > 0.5:
+        # Velocity Signals
+        if float(meta.get("device_risk", 0.0)) > 0.5:
              factors.append({"type": "rule", "description": "HIGH_DEVICE_REUSE", "impact": 0.3, "severity": "medium"})
         
-        if meta.get("metadata_flags") and "IP_VELOCITY_SPIKE" in meta.get("metadata_flags", []):
+        if "IP_VELOCITY_SPIKE" in meta.get("flags", []):
              factors.append({"type": "rule", "description": "IP_VELOCITY_ABUSE", "impact": 0.5, "severity": "high"})
 
-        # Low Severity
-        if calibrated.get("quality_score", 1.0) < 0.4:
-            factors.append({"type": "rule", "description": "LOW_INPUT_QUALITY", "impact": 0.1, "severity": "low"})
-            
         return factors
-
-    def _fuse_signals(self, tabular: float, graph: float, rule_penalty: float) -> float:
-        # Monotonic constraint: Risk can only increase
-        base = max(tabular, graph)
-        return min(base + rule_penalty, 1.0)
-
-    def _get_risk_hint(self, score: float) -> str:
-        if score > 0.7: return "high risk"
-        if score > 0.4: return "medium risk"
-        return "low risk"

@@ -1,125 +1,124 @@
-import numpy as np
-import logging
 import os
+import torch
+import numpy as np
+import cv2
+from PIL import Image
+import logging
 from typing import Dict, Any, List, Optional, Tuple
 
-logger = logging.getLogger("forensic_engine_v2")
+from backend_v2.models.forensic_unet import ForensicUNet
+from backend_v2.forensic.utils.signals import compute_ela, compute_hpf
+from backend_v2.forensic.utils.postprocess import postprocess_mask, calculate_tamper_score, detect_forgery_type
+
+logger = logging.getLogger("forensic_service")
 
 class ForensicService:
+    _instance = None
+    _model = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(ForensicService, cls).__new__(cls)
+        return cls._instance
+
     def __init__(self):
-        self.version = "v1.0"
-        self.tamper_threshold = 0.6
-        self.text_tamper_threshold = 0.7
-        self.synthetic_threshold = 0.4
-        self.model_version = "Veridex-Forensics-v3.0"
+        if not hasattr(self, 'initialized'):
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            self.model_path = "backend_v2/models/weights/forensic_unet_best.pth"
+            self.img_size = 512
+            self.threshold = 0.45
+            self.initialized = True
+            logger.info(f"ForensicService initialized on {self.device}")
 
-    def analyze(self, image_path: str, ocr_result: Dict[str, Any], metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def _load_model(self):
+        if self._model is None:
+            self._model = ForensicUNet(in_channels=5).to(self.device)
+            if os.path.exists(self.model_path):
+                try:
+                    self._model.load_state_dict(torch.load(self.model_path, map_location=self.device))
+                    logger.info(f"Loaded Forensic weights from {self.model_path}")
+                except Exception as e:
+                    logger.error(f"Failed to load Forensic weights: {e}. Using untrained model (MOCK ALERT).")
+            else:
+                logger.warning(f"Forensic weights not found at {self.model_path}. Running with random initialization.")
+            self._model.eval()
+
+    def analyze(self, image_path: str, ocr_result: Optional[Dict] = None, metadata: Optional[Dict] = None) -> Dict[str, Any]:
         """
-        Refined Forensic Analysis with text-level detection and explainability.
+        Main entry point for forensic analysis.
+        Uses Hybrid Signal-Visual UNet + Metadata/OCR heuristics.
         """
-        ocr_tokens = ocr_result.get("tokens", [])
+        self._load_model()
         
-        # 1. Text Tampering Detection (MANDATORY)
-        text_tamper_score, text_regions = self._detect_text_anomalies(ocr_tokens)
-        
-        # 2. GAN/Synthetic Detection (Simulated FFT)
-        synthetic_score = self._run_synthetic_detector(image_path)
-        
-        # 3. Base Pixel-Level Forensics (ELA, Copy-Move, Noiseprint)
-        ela_score = 0.12 # Mocked
-        copy_move_score = 0.05
-        noiseprint_score = 0.08
-        metadata_score = self._audit_metadata(metadata)
-
-        # 4. Adaptive Signal Weighting
-        is_camera = metadata and metadata.get("Make") is not None
-        if is_camera:
-            weights = {"ela": 0.3, "copy_move": 0.1, "metadata": 0.1, "noiseprint": 0.2, "text": 0.2, "synthetic": 0.1}
-        else: # Scanned or PDF
-            weights = {"ela": 0.1, "copy_move": 0.2, "metadata": 0.3, "noiseprint": 0.1, "text": 0.2, "synthetic": 0.1}
-
-        # 5. Final Calibrated Score
-        scores = {
-            "ela": ela_score, "copy_move": copy_move_score, "metadata": metadata_score,
-            "noiseprint": noiseprint_score, "text": text_tamper_score, "synthetic": synthetic_score
-        }
-        final_score = sum(scores[k] * weights[k] for k in weights)
-
-        # 6. Attack Type Classification
-        attack_type = self._classify_attack_v2(scores)
-
-        # 7. Localization (Merge regions)
-        tamper_regions = text_regions # In production, merge with ELA/Copy-Move regions
-        
-        flags = {
-            "tampered": final_score > self.tamper_threshold,
-            "copy_move_detected": copy_move_score > 0.7,
-            "metadata_inconsistent": metadata_score > 0.8,
-            "text_tamper_detected": text_tamper_score > self.text_tamper_threshold
-        }
-
-        return {
-            "tamper_score": round(ela_score, 4),
-            "copy_move_score": round(copy_move_score, 4),
-            "deepfake_doc_score": round(synthetic_score, 4),
-            "metadata_score": round(metadata_score, 4),
-            "noiseprint_score": round(noiseprint_score, 4),
-            "text_tamper_score": round(text_tamper_score, 4),
-            "final_forensic_score": round(final_score, 4),
-            "tamper_regions": tamper_regions,
-            "attack_type": attack_type,
-            "flags": flags,
-            "model_version": self.model_version
-        }
-
-    def _detect_text_anomalies(self, tokens: List[Dict]) -> Tuple[float, List[Dict]]:
-        """
-        Detects tampering by analyzing baseline alignment and font consistency.
-        """
-        if not tokens: return 0.0, []
-        
-        anomalies = []
-        regions = []
-        
-        # Simple baseline alignment check (Y-variance within tokens of similar Y)
-        # In production, this would group tokens by line first
-        y_coords = [t["bbox"][1] for t in tokens]
-        if len(y_coords) > 5:
-            y_var = np.var(y_coords)
-            if y_var > 50: # Heuristic for misalignment
-                score = min(y_var / 500.0, 1.0)
-                anomalies.append(score)
-                # Flag region of highest variance
-                regions.append({
-                    "bbox": tokens[np.argmax(np.abs(y_coords - np.mean(y_coords)))]["bbox"],
-                    "score": score,
-                    "type": "text_edit"
-                })
-
-        avg_score = np.mean(anomalies) if anomalies else 0.0
-        return avg_score, regions
-
-    def _run_synthetic_detector(self, path: str) -> float:
-        # Mocking FFT-based frequency artifact detection
-        return 0.04 # Clean result
+        try:
+            # 1. Preprocessing (5-channel input)
+            img = Image.open(image_path).convert("RGB")
+            img_resized = img.resize((self.img_size, self.img_size), Image.BILINEAR)
+            img_arr = np.array(img_resized).astype(np.float32) / 255.0
+            
+            ela_arr = compute_ela(image_path, quality=90)
+            ela_resized = cv2.resize(ela_arr, (self.img_size, self.img_size)).astype(np.float32) / 255.0
+            
+            hpf_arr = compute_hpf(np.array(img_resized)).astype(np.float32) / 255.0
+            
+            combined = np.concatenate([
+                img_arr, 
+                ela_resized[:, :, np.newaxis], 
+                hpf_arr[:, :, np.newaxis]
+            ], axis=2)
+            
+            input_tensor = torch.from_numpy(combined).permute(2, 0, 1).unsqueeze(0).to(self.device)
+            
+            # 2. Inference
+            with torch.no_grad():
+                mask = self._model(input_tensor).squeeze().cpu().numpy()
+            
+            # 3. Post-processing
+            clean_mask, regions = postprocess_mask(mask)
+            model_score = calculate_tamper_score(mask, regions)
+            forgery_type = detect_forgery_type(regions, self.img_size)
+            
+            # 4. Heuristic Overrides (Metadata/OCR)
+            metadata_score = self._audit_metadata(metadata)
+            
+            # Combine scores (Model is primary)
+            final_score = 0.8 * model_score + 0.2 * metadata_score
+            
+            # 5. Flags
+            flags = {
+                "tampered_high_confidence": final_score > 0.7,
+                "metadata_suspicious": metadata_score > 0.8,
+                "many_alterations": len(regions) > 5,
+                "text_edit_detected": forgery_type == "text-edit",
+                "splicing_detected": forgery_type == "splicing"
+            }
+            
+            return {
+                "tamper_score": round(final_score, 4),
+                "is_altered": final_score > self.threshold,
+                "forgery_type": forgery_type,
+                "regions": [r["bbox"] for r in regions],
+                "confidence": round(model_score, 4),
+                "metadata_score": round(metadata_score, 4),
+                "flags": flags,
+                "model_version": "Hybrid-UNet-v1-5ch"
+            }
+            
+        except Exception as e:
+            logger.error(f"Inference failed: {e}")
+            return {
+                "tamper_score": 0.0,
+                "is_altered": False,
+                "forgery_type": "unknown",
+                "regions": [],
+                "confidence": 0.0,
+                "flags": {"INFERENCE_FAILED": True},
+                "error": str(e)
+            }
 
     def _audit_metadata(self, metadata: Optional[Dict]) -> float:
-        if not metadata: return 0.2 # Neutral suspicion
-        software = metadata.get("Software", "").lower()
-        if any(tool in software for tool in ["photoshop", "gimp", "picsart"]):
+        if not metadata: return 0.0
+        software = str(metadata.get("Software", "")).lower()
+        if any(tool in software for tool in ["photoshop", "gimp", "picsart", "exiftool", "adobe"]):
             return 0.95
-        return 0.05
-
-    def _classify_attack_v2(self, scores: Dict) -> str:
-        max_source = max(scores, key=scores.get)
-        if scores[max_source] < 0.4: return "none"
-        
-        mapping = {
-            "ela": "composite",
-            "copy_move": "copy_move",
-            "metadata": "metadata",
-            "text": "text_edit",
-            "synthetic": "synthetic",
-            "noiseprint": "composite"
-        }
-        return mapping.get(max_source, "none")
+        return 0.0

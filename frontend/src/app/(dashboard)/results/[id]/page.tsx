@@ -1,16 +1,18 @@
 "use client";
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  ShieldCheck, ShieldAlert, ArrowLeft, Download, BarChart3, Lock, Eye, Clock, 
-  Activity, Search, Fingerprint, FileText, AlertTriangle, Cpu
-} from 'lucide-react';
+import { ShieldCheck, ShieldAlert, ArrowLeft, Download, Clock, Eye, Fingerprint, FileText, Lock } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { verificationService, VerifyResponse, Verdict } from '@/services/api';
+import { verificationService, VerifyResponse } from '@/services/api';
 import { cn } from '@/lib/utils';
 import { useResultStore } from '@/stores/useResultStore';
 import { ResultPanelSkeleton } from '@/components/Skeleton';
+import { DeepAnalysisGrid } from '@/components/results/DeepAnalysisGrid';
+import { SignalMatrix } from '@/components/results/SignalMatrix';
+import { CriticalFlagsPanel } from '@/components/results/CriticalFlagsPanel';
+import { AssetCard } from '@/components/results/AssetCard';
+import { AuditTimeline } from '@/components/results/AuditTimeline';
 
 export default function ResultsPage() {
   const { id } = useParams();
@@ -132,47 +134,12 @@ export default function ResultsPage() {
             </div>
           </div>
 
-          <div className="bg-slate-900 border border-slate-800 rounded-[2.5rem] p-8 shadow-xl space-y-6">
-             <h3 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-2">
-               <AlertTriangle className="w-4 h-4 text-rose-500" /> Critical Red Flags
-             </h3>
-             <div className="space-y-3">
-                {display_factors && display_factors.length > 0 ? display_factors.map((factor, i) => (
-                  <div key={i} className="flex gap-4 items-center p-4 bg-rose-900/20 rounded-2xl border border-rose-900/50">
-                     <div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
-                     <p className="text-[11px] font-black text-rose-400 uppercase tracking-tight">{factor.replace(/_/g, ' ')}</p>
-                  </div>
-                )) : (
-                  <div className="text-center py-6 space-y-3">
-                    <ShieldCheck className="w-8 h-8 text-emerald-500 mx-auto opacity-50" />
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest italic">No adverse signals detected.</p>
-                  </div>
-                )}
-             </div>
-          </div>
+          <CriticalFlagsPanel flags={display_factors as string[]} />
         </div>
 
         {/* RIGHT COLUMN: Signal Matrix & Raw Evidence */}
         <div className="lg:col-span-8 space-y-10">
-          <div className="bg-slate-900 border border-slate-800 rounded-[2.5rem] p-10 shadow-2xl text-white">
-            <div className="flex justify-between items-center mb-10 pb-6 border-b border-slate-800/50">
-               <h3 className="text-xs font-black uppercase tracking-widest flex items-center gap-2 text-white">
-                 <Activity className="w-4 h-4 text-blue-500" /> Calibrated Signal Matrix
-               </h3>
-               <p className="text-[10px] font-mono text-slate-500">V2.5.0-STABLE</p>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-8">
-               <SignalMetric label="OCR Confidence" value={ocr?.confidence} />
-               <SignalMetric label="Doc Integrity" value={document?.confidence} />
-               <SignalMetric label="Face Similarity" value={biometrics?.face_similarity} />
-               <SignalMetric label="Liveness Check" value={biometrics?.liveness_score} />
-               <SignalMetric label="Forensic Score" value={forensics ? 1 - forensics.tamper_score : undefined} />
-               <SignalMetric label="Fraud Risk" value={fraud ? 1 - fraud.fraud_score : undefined} />
-               <SignalMetric label="Network Trust" value={net_metadata ? 1 - net_metadata.ip_risk : undefined} />
-               <SignalMetric label="Device Integrity" value={net_metadata ? 1 - net_metadata.device_risk : undefined} />
-            </div>
-          </div>
+          <SignalMatrix data={data} />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <AssetCard label="Scanned Document" icon={<FileText/>} src={image_paths?.id_card ? `${API_URL}${image_paths.id_card}` : null} onExpand={setSelectedAsset} />
@@ -189,6 +156,12 @@ export default function ResultsPage() {
         </div>
       </div>
 
+      {/* DEEP VERIFICATION ANALYSIS */}
+      <DeepAnalysisGrid data={data} />
+
+      {/* AUDIT TRACE & SYSTEM LOGS */}
+      <AuditTimeline data={data} />
+
       <AnimatePresence>
         {selectedAsset && (
           <motion.div 
@@ -203,52 +176,6 @@ export default function ResultsPage() {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
-  );
-}
-
-function SignalMetric({ label, value }: { label: string; value: number | undefined }) {
-  const pct = (value || 0) * 100;
-  const isUndefined = value === undefined;
-  
-  return (
-    <div className="space-y-3">
-      <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
-        <span className="text-slate-400">{label}</span>
-        <span className={cn("font-mono", isUndefined ? "text-slate-600" : pct > 70 ? "text-emerald-400" : pct > 30 ? "text-amber-400" : "text-rose-400")}>
-          {isUndefined ? "N/A" : `${pct.toFixed(1)}%`}
-        </span>
-      </div>
-      <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-        {!isUndefined && (
-          <motion.div 
-            initial={{ width: 0 }}
-            animate={{ width: `${pct}%` }}
-            className={cn("h-full", pct > 70 ? "bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]" : pct > 30 ? "bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]" : "bg-rose-500 shadow-[0_0_10px_rgba(225,29,72,0.5)]")} 
-          />
-        )}
-      </div>
-    </div>
-  );
-}
-
-function AssetCard({ label, src, icon, onExpand }: { label: string; src: string | null; icon: any; onExpand: (s: string) => void }) {
-  return (
-    <div className="group relative bg-slate-900 border border-slate-800 rounded-[2rem] p-6 shadow-xl hover:shadow-2xl transition-all cursor-zoom-in h-[320px] flex flex-col" onClick={() => src && onExpand(src)}>
-       <div className="flex-1 rounded-2xl overflow-hidden bg-slate-950 mb-6 border border-slate-800 relative">
-          {src ? (
-            <img src={src} alt={label} className="w-full h-full object-cover grayscale-[0.3] group-hover:grayscale-0 transition-all group-hover:scale-105" />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-slate-800">
-               {icon}
-            </div>
-          )}
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-       </div>
-       <div className="flex justify-between items-center px-2">
-         <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest flex items-center gap-2">{icon} {label}</p>
-         <Eye className="w-4 h-4 text-slate-600 group-hover:text-blue-500 transition-colors" />
-       </div>
     </div>
   );
 }

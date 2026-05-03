@@ -52,7 +52,7 @@ export default function HistoryPage() {
   const filteredRecords = records.filter(r => {
     const matchesSearch = 
       r.tracking_id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      r.top_factors?.some(f => f.toLowerCase().includes(searchTerm.toLowerCase()));
+      r.fraud?.rules_triggered?.some((f: string) => f.toLowerCase().includes(searchTerm.toLowerCase()));
     
     if (activeFilter === 'ALL') return matchesSearch;
     return matchesSearch && r.decision === activeFilter;
@@ -161,7 +161,7 @@ export default function HistoryPage() {
                           <div className="min-w-0">
                              <p className="text-[11px] font-mono font-bold text-slate-300 tracking-tighter truncate w-32">{record.tracking_id}</p>
                              <div className="flex gap-1 mt-1.5">
-                                {record.top_factors.slice(0, 2).map((f, i) => (
+                                {(record.fraud?.rules_triggered || []).slice(0, 2).map((f: string, i: number) => (
                                   <span key={i} className="px-1.5 py-0.5 bg-rose-900/20 text-[8px] font-black text-rose-400 border border-rose-500/20 uppercase rounded tracking-tighter">{f.split('_')[0]}</span>
                                 ))}
                              </div>

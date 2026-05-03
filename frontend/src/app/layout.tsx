@@ -23,6 +23,7 @@ export const metadata: Metadata = {
 };
 
 import { SessionInitializer } from "@/components/SessionInitializer";
+import { ThemeProvider } from "@/components/ThemeProvider";
 
 export default function RootLayout({
   children,
@@ -30,11 +31,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${outfit.variable} antialiased`}>
-      <body className="min-h-screen bg-slate-50 selection:bg-blue-100 selection:text-blue-900">
-        <SessionInitializer>
-          {children}
-        </SessionInitializer>
+    <html lang="en" className={`${inter.variable} ${outfit.variable} antialiased`} suppressHydrationWarning>
+      <body className="min-h-screen bg-background text-foreground transition-colors duration-300">
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="dark"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <SessionInitializer>
+            {children}
+          </SessionInitializer>
+        </ThemeProvider>
       </body>
     </html>
   );

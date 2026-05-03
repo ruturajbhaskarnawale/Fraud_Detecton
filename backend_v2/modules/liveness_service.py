@@ -49,21 +49,33 @@ class LivenessService:
             # Since our model is trained on both deepfakes and spoofs,
             # 'liveness_score' represents the probability of being REAL.
             
-            status = "PASS" if liveness_score > self.base_liveness_threshold else "FAIL"
+            # Calibrated Interpretation:
+            # > 0.7 -> REAL
+            # 0.3 - 0.7 -> UNCERTAIN
+            # < 0.3 -> SPOOF
             
-            # Attack Classification (Inferred from score depth)
+            status = "FAIL"
+            if liveness_score > 0.7: status = "PASS"
+            elif liveness_score > 0.4: status = "REVIEW"
+            
+            # Attack Classification (Refined)
             attack_type = "none"
-            if liveness_score < 0.3: attack_type = "spoof_physical"
-            elif liveness_score < 0.6: attack_type = "spoof_digital"
+            flags = {
+                "spoof_detected": liveness_score < 0.5,
+                "uncertain_liveness": 0.4 < liveness_score < 0.7
+            }
+            
+            if liveness_score < 0.2: 
+                attack_type = "physical_spoof_detected"
+                flags["CRITICAL_SPOOF"] = True
+            elif liveness_score < 0.5:
+                attack_type = "digital_spoof_detected"
             
             return {
                 "liveness_score": round(liveness_score, 4),
                 "confidence": round(liveness_score, 4),
                 "status": status,
-                "flags": {
-                    "spoof_detected": liveness_score < self.base_liveness_threshold,
-                    "low_confidence": 0.7 < liveness_score < self.base_liveness_threshold
-                },
+                "flags": flags,
                 "attack_type": attack_type
             }
         except Exception as e:

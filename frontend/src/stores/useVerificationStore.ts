@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
 
 export type PipelineStage = 
   | 'idle' 
@@ -29,32 +28,18 @@ interface VerificationState {
   reset: () => void;
 }
 
-export const useVerificationStore = create<VerificationState>()(
-  persist(
-    (set) => ({
-      stage: 'idle',
-      progress: 0,
-      error: null,
-      idFile: null,
-      selfieFile: null,
+export const useVerificationStore = create<VerificationState>()((set) => ({
+  stage: 'idle',
+  progress: 0,
+  error: null,
+  idFile: null,
+  selfieFile: null,
 
-      setStage: (stage) => set({ stage }),
-      setProgress: (progress) => set({ progress }),
-      setError: (error) => set({ error }),
-      setIdFile: (idFile) => set({ idFile }),
-      setSelfieFile: (selfieFile) => set({ selfieFile }),
-      setFiles: (idFile, selfieFile) => set({ idFile, selfieFile }),
-      reset: () => set({ stage: 'idle', progress: 0, error: null, idFile: null, selfieFile: null }),
-    }),
-    {
-      name: 'veridex-verification-storage',
-      storage: createJSONStorage(() => localStorage),
-      // Only persist metadata, not the File objects which are large and non-serializable
-      partialize: (state) => ({ 
-        stage: state.stage, 
-        error: state.error,
-        progress: state.progress 
-      }),
-    }
-  )
-);
+  setStage: (stage) => set({ stage }),
+  setProgress: (progress) => set({ progress }),
+  setError: (error) => set({ error }),
+  setIdFile: (idFile) => set({ idFile }),
+  setSelfieFile: (selfieFile) => set({ selfieFile }),
+  setFiles: (idFile, selfieFile) => set({ idFile, selfieFile }),
+  reset: () => set({ stage: 'idle', progress: 0, error: null, idFile: null, selfieFile: null }),
+}));

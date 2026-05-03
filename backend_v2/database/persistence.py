@@ -6,7 +6,7 @@ from backend_v2.database.models import (
     BiometricResult, ForensicResult, RiskResult,
     AuditLog, DeviceIntelligence, IPIntelligence,
     DecisionHistory, ModuleError, FeatureStore,
-    DocumentResult, FraudResult
+    DocumentResult, FraudResult, MetadataResult
 )
 from backend_v2.database.manager import SessionLocal
 from datetime import datetime
@@ -259,6 +259,10 @@ class PersistenceService:
             forn = self.db.query(ForensicResult).filter(ForensicResult.session_id == sess_uuid).first()
             fraud = self.db.query(FraudResult).filter(FraudResult.session_id == sess_uuid).first()
             risk = self.db.query(RiskResult).filter(RiskResult.session_id == sess_uuid).first()
+            
+            # Fetch Audit/History
+            errors = self.db.query(ModuleError).filter(ModuleError.session_id == sess_uuid).all()
+            history = self.db.query(DecisionHistory).filter(DecisionHistory.session_id == sess_uuid).order_by(DecisionHistory.created_at.asc()).all()
 
             # Safely parse JSON fields that might be strings
             import json
@@ -282,6 +286,22 @@ class PersistenceService:
             forn_forgeries = safe_dict(forn.detected_forgeries if forn else None)
             fraud_signals = safe_dict(fraud.signals if fraud else None)
             risk_scores = safe_dict(risk.module_scores if risk else None)
+
+            # Fetch artifacts for image paths
+            artifacts = self.db.query(Artifact).filter(Artifact.session_id == sess_uuid).all()
+            image_paths = {}
+            for art in artifacts:
+                # Assuming file_path is like 'uploads/backend_v2/file.jpg'
+                # We mounted '/uploads' to 'uploads'
+                # So if file is 'uploads/backend_v2/file.jpg', URL should be '/uploads/backend_v2/file.jpg'
+                fp = art.file_path.replace("\\", "/")
+                if not fp.startswith("/"):
+                    fp = "/" + fp
+                image_paths[art.artifact_type] = fp
+
+            # 6. Metadata
+            meta = self.db.query(MetadataResult).filter(MetadataResult.session_id == sess_uuid).first()
+            meta_flags = safe_dict(meta.flags if meta else None)
 
             return PipelineResult(
                 session_id=str(sess_uuid),
@@ -310,10 +330,12 @@ class PersistenceService:
                     forgery_flags=list(forn_forgeries.keys())
                 ),
                 metadata=MetadataData(
-                    ip_risk=0.0,
-                    device_risk=0.0,
-                    geo_anomaly=False,
-                    flags=[]
+                    ip_risk=meta.ip_risk if meta else 0.0,
+                    device_risk=meta.device_risk if meta else 0.0,
+                    geo_risk=meta.geo_risk if meta else 0.0,
+                    geo_anomaly=meta.geo_anomaly if meta else False,
+                    is_vpn=meta.is_vpn if meta else False,
+                    flags=list(meta_flags.keys())
                 ),
                 fraud=FraudData(
                     fraud_score=fraud.fraud_score if fraud else 0.0,
@@ -325,7 +347,10 @@ class PersistenceService:
                     level=risk.risk_level if risk else "UNKNOWN",
                     breakdown=risk_scores
                 ),
-                timestamp=sess.created_at
+                errors=[{"module": e.module_name, "message": e.error_message, "at": e.created_at.isoformat()} for e in errors],
+                history=[{"decision": h.decision, "actor": h.actor, "at": h.created_at.isoformat()} for h in history],
+                image_paths=image_paths,
+                timestamp=sess.created_at.isoformat() if sess.created_at else datetime.now().isoformat()
             )
         except Exception as e:
             logger.error(f"Failed to fetch session results: {e}")

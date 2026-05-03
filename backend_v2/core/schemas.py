@@ -19,7 +19,7 @@ class IngestionError(BaseModel):
     status: IngestionStatus
     reason: str
     code: str
-    timestamp: datetime = Field(default_factory=datetime.now)
+    timestamp: str = Field(default_factory=lambda: datetime.now().isoformat())
 
 
 class DocumentType(str, Enum):
@@ -41,7 +41,7 @@ class EvidenceBundle(BaseModel):
     session_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     document_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     entity_id: Optional[str] = None
-    timestamp: datetime = Field(default_factory=datetime.now)
+    timestamp: str = Field(default_factory=lambda: datetime.now().isoformat())
     
     raw_input_path: str
     selfie_path: Optional[str] = None
@@ -82,7 +82,9 @@ class ForensicData(BaseModel):
 class MetadataData(BaseModel):
     ip_risk: float
     device_risk: float
+    geo_risk: Optional[float] = 0.0
     geo_anomaly: bool
+    is_vpn: Optional[bool] = False
     flags: List[str] = []
 
 class FraudData(BaseModel):
@@ -97,9 +99,12 @@ class RiskData(BaseModel):
 
 class PipelineResult(BaseModel):
     session_id: str
+    tracking_id: Optional[str] = None # For UI compatibility
     entity_id: Optional[str] = None
     decision: Decision
+    risk_score: float = 0.0
     confidence_score: float
+    rules_triggered: List[str] = []
     explanation: str
     
     # Standardized Module Results
@@ -110,10 +115,13 @@ class PipelineResult(BaseModel):
     metadata: Optional[MetadataData] = None
     fraud: Optional[FraudData] = None
     risk: Optional[RiskData] = None
+    
+    errors: List[Dict[str, Any]] = []
+    history: List[Dict[str, Any]] = []
 
     
     module_breakdown: Dict[str, Any] = {} # Legacy support
     image_paths: Dict[str, str] = {}
-    timestamp: datetime = Field(default_factory=datetime.now)
+    timestamp: str = Field(default_factory=lambda: datetime.now().isoformat())
 
 

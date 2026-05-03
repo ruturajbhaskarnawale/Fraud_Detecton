@@ -27,15 +27,16 @@ except ImportError:
 CFG = dict(
     data_dir       = r"c:\Users\rutur\OneDrive\Desktop\jotex\Dataset\document_understanding",
     model_name     = "microsoft/layoutlmv3-base",
-    epochs         = 10,
-    batch_size     = 4,
-    accum_steps    = 8,          # effective batch = 4*8 = 32
-    lr_max         = 2e-5,
+    epochs         = 20,          # Increased for better convergence
+    batch_size     = 1,           # Reduced to 1 to prevent OOM/Pagefile errors on CPU
+    accum_steps    = 16,          # Accumulate to get an effective batch size of 16
+    lr_max         = 3e-5,        # Slightly higher learning rate
     weight_decay   = 1e-4,
-    val_split      = 0.10,
+    val_split      = 0.15,        # 15% for validation
     device         = "cuda" if torch.cuda.is_available() else "cpu",
     num_workers    = 0,
     log_interval   = 10,
+    limit_samples  = None,         # Use full dataset
 )
 
 WEIGHTS_DIR = Path(__file__).resolve().parent.parent / "models" / "weights"
@@ -117,6 +118,12 @@ def train():
     full_dataset = ConcatDataset(datasets)
     print(f"[train] Combined Dataset Size: {len(full_dataset)}")
     
+    if CFG.get("limit_samples"):
+        import numpy as np
+        indices = np.random.choice(len(full_dataset), min(CFG["limit_samples"], len(full_dataset)), replace=False)
+        full_dataset = torch.utils.data.Subset(full_dataset, indices)
+        print(f"[train] Subsampled to {len(full_dataset)} for quick run.")
+    
     val_size = max(1, int(CFG["val_split"] * len(full_dataset)))
     train_size = len(full_dataset) - val_size
     train_ds, val_ds = random_split(full_dataset, [train_size, val_size])
@@ -140,6 +147,7 @@ def train():
     total_params = sum(p.numel() for p in model.parameters())
     print(f"[train] LayoutLMv3 params: {total_params:,}")
     
+    # ── Memory Optimization: Batch size is set to 1 in CFG
     optimizer = optim.AdamW(model.parameters(), lr=CFG["lr_max"], weight_decay=CFG["weight_decay"])
     
     # ── Training Loop
@@ -200,4 +208,9 @@ def train():
         print("Copied best -> layoutlmv3.pth for inference.")
 
 if __name__ == "__main__":
-    train()
+    try:
+        train()
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)

@@ -198,12 +198,14 @@ python backend_v2/train/benchmark_liveness.py
 
 ## Forensic Model Training
 ```bash
-python backend_v2/train/train_forensic.py
+# Ensure you are in the project root (jotex)
+$env:PYTHONPATH = "."; python backend_v2/train/train_forensic.py
 ```
 
 ## Fraud Model Training
 ```bash
-python backend_v2/train/train_fraud.py
+# Ensure you are in the project root (jotex)
+$env:PYTHONPATH = "."; python backend_v2/train/train_fraud.py
 ```
 
 ## Environment Variables

@@ -1,94 +1,67 @@
 import os
-import cv2
+import json
 import torch
 import numpy as np
-from PIL import Image
+import cv2
+from PIL import Image, ImageChops
 from torch.utils.data import Dataset
 from pathlib import Path
 from typing import Tuple
+from backend_v2.forensic.utils.signals import compute_ela, compute_hpf
 
 class ForensicDataset(Dataset):
     """
-    Unified Dataset for Image Forensics:
-    - CASIA2 Replenished (Professional)
-    - Synthetic Tamper (ID Specific)
-    - Raw (Bona Fide Clean)
+    Production-grade Forensic Dataset:
+    - Loads from a pre-built manifest.json
+    - Generates RGB (3) + ELA (1) + HPF (1) = 5 channel input
+    - Supports dynamic resizing and normalization
     """
-    def __init__(self, data_root: str, img_size=256, compute_ela=True):
-        self.data_root = Path(data_root)
+    def __init__(self, manifest_path: str, img_size=512, mode='train'):
         self.img_size = img_size
-        self.compute_ela = compute_ela
-        self.samples = []
+        self.mode = mode
         
-        # 1. Load CASIA2
-        casia_dir = self.data_root / "raw" / "casia2_replenished"
-        if casia_dir.exists():
-            img_dir = casia_dir / "images"
-            mask_dir = casia_dir / "masks"
-            for img_path in img_dir.glob("*.jpg"):
-                mask_path = mask_dir / f"{img_path.stem}_mask.png"
-                if mask_path.exists():
-                    self.samples.append((img_path, mask_path))
-
-        # 2. Load Synthetic Tamper
-        synth_dir = self.data_root / "synthetic_tamper"
-        if synth_dir.exists():
-            for img_path in synth_dir.glob("*.jpg"):
-                mask_path = img_path.with_suffix(".png") # assuming mask has same name but .png
-                if mask_path.exists():
-                    self.samples.append((img_path, mask_path))
-
-        # 3. Load Raw Clean (Negatives)
-        raw_dir = self.data_root / "raw"
-        if raw_dir.exists():
-            for img_path in raw_dir.glob("*.jpg"):
-                if "casia" not in str(img_path): # Avoid duplication
-                    self.samples.append((img_path, None)) # None means empty mask
+        with open(manifest_path, "r") as f:
+            self.samples = json.load(f)
+            
+        # Basic split if manifest doesn't have it
+        # (Assuming build_manifest.py handles split identification via 'source' or separate files)
+        # For simplicity, we just filter by source in this implementation or take all
+        print(f"Loaded {len(self.samples)} samples from manifest.")
 
     def __len__(self):
         return len(self.samples)
 
-    def _compute_ela(self, image: Image.Image, quality=90) -> np.ndarray:
-        """
-        Error Level Analysis: Difference between original and resaved JPEG
-        """
-        temp_path = "temp_ela.jpg"
-        image.save(temp_path, "JPEG", quality=quality)
-        resaved = Image.open(temp_path)
-        
-        # Calculate diff
-        ela_img = Image.blend(image, resaved, -1.0) # image - resaved
-        # Convert to grayscale and normalize
-        ela_arr = np.array(ela_img.convert("L"))
-        
-        # Scale to emphasize differences
-        ela_arr = (ela_arr * 10).clip(0, 255)
-        
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
-            
-        return ela_arr
-
     def __getitem__(self, idx) -> Tuple[torch.Tensor, torch.Tensor]:
-        img_path, mask_path = self.samples[idx]
+        sample = self.samples[idx]
+        img_path = sample["image"]
+        mask_path = sample["mask"]
         
         try:
-            # 1. Image + ELA
+            # 1. Load and resize RGB
             img = Image.open(img_path).convert("RGB")
-            img = img.resize((self.img_size, self.img_size), Image.BILINEAR)
+            img_resized = img.resize((self.img_size, self.img_size), Image.BILINEAR)
+            img_arr = np.array(img_resized).astype(np.float32) / 255.0
             
-            img_arr = np.array(img).astype(np.float32) / 255.0
+            # 2. Compute ELA (Error Level Analysis)
+            # We use a lower resolution for ELA calculation to be faster, then upscale if needed
+            ela_arr = compute_ela(img_path, quality=90)
+            ela_resized = cv2.resize(ela_arr, (self.img_size, self.img_size))
+            ela_resized = ela_resized.astype(np.float32) / 255.0
             
-            if self.compute_ela:
-                ela_arr = self._compute_ela(img)
-                ela_arr = ela_arr.astype(np.float32) / 255.0
-                # Combine to 4-channel: [H, W, 4]
-                img_combined = np.concatenate([img_arr, ela_arr[:, :, np.newaxis]], axis=2)
-            else:
-                img_combined = img_arr
+            # 3. Compute HPF (High-Pass Filter)
+            hpf_arr = compute_hpf(np.array(img_resized))
+            hpf_resized = hpf_arr.astype(np.float32) / 255.0
             
-            # 2. Mask
-            if mask_path:
+            # 4. Combine channels [H, W, 5]
+            # Channels: R, G, B, ELA, HPF
+            combined = np.concatenate([
+                img_arr, 
+                ela_resized[:, :, np.newaxis], 
+                hpf_resized[:, :, np.newaxis]
+            ], axis=2)
+            
+            # 5. Mask
+            if mask_path and os.path.exists(mask_path):
                 mask = Image.open(mask_path).convert("L")
                 mask = mask.resize((self.img_size, self.img_size), Image.NEAREST)
                 mask_arr = np.array(mask).astype(np.float32) / 255.0
@@ -96,21 +69,26 @@ class ForensicDataset(Dataset):
             else:
                 mask_arr = np.zeros((self.img_size, self.img_size), dtype=np.float32)
                 
-            # To Tensors
-            img_tensor = torch.from_numpy(img_combined).permute(2, 0, 1)
+            # To Tensors [C, H, W]
+            img_tensor = torch.from_numpy(combined).permute(2, 0, 1)
             mask_tensor = torch.from_numpy(mask_arr).unsqueeze(0)
+            
+            # ImageNet Normalization (only for RGB channels 0-2)
+            # mean = [0.485, 0.456, 0.406], std = [0.229, 0.224, 0.225]
+            # We'll do this in the training loop or here
             
             return img_tensor, mask_tensor
             
         except Exception as e:
-            # Fallback
-            return torch.zeros((4 if self.compute_ela else 3, self.img_size, self.img_size)), torch.zeros((1, self.img_size, self.img_size))
+            # Fallback for corrupt images
+            return torch.zeros((5, self.img_size, self.img_size)), torch.zeros((1, self.img_size, self.img_size))
 
 if __name__ == "__main__":
     # Test
-    ds = ForensicDataset(r"c:\Users\rutur\OneDrive\Desktop\jotex\Dataset\forensic")
-    print(f"Total forensic samples: {len(ds)}")
-    if len(ds) > 0:
+    manifest = "backend_v2/forensic/data/manifest.json"
+    if os.path.exists(manifest):
+        ds = ForensicDataset(manifest, img_size=256)
+        print(f"Total samples: {len(ds)}")
         img, mask = ds[0]
-        print(f"Combined tensor shape: {img.shape}")
+        print(f"Input shape: {img.shape}") # Expect [5, 256, 256]
         print(f"Mask shape: {mask.shape}")

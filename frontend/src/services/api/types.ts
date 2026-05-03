@@ -49,7 +49,9 @@ export interface VerifyResponse {
   metadata: {
     ip_risk: number;
     device_risk: number;
+    geo_risk: number;
     geo_anomaly: boolean;
+    is_vpn: boolean;
     flags: string[];
   };
   fraud: {
@@ -62,6 +64,8 @@ export interface VerifyResponse {
     level: string;
     breakdown: Record<string, number>;
   };
+  errors?: { module: string; message: string; at: string }[];
+  history?: { decision: string; actor: string; at: string }[];
   timestamp: string;
   image_paths: {
     id_card: string;

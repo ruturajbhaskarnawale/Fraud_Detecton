@@ -14,10 +14,9 @@ class DocUnderstandingService:
         self.version = "v1.0"
         # Anchor Keywords with weighted criticality
         self.config = {
-
-            "name": {"anchors": ["name", "full name", "नाम", "नाम:"], "critical": True, "weight": 0.4},
-            "dob": {"anchors": ["dob", "date of birth", "birth", "जन्म तिथि"], "critical": False, "weight": 0.2},
-            "id_number": {"anchors": ["id", "no", "number", "pan", "aadhaar"], "critical": True, "weight": 0.4}
+            "name": {"anchors": ["name", "full name", "नाम", "नाम:", "father", "husband"], "critical": True, "weight": 0.4},
+            "dob": {"anchors": ["dob", "date of birth", "birth", "जन्म तिथि", "year", "yob"], "critical": False, "weight": 0.2},
+            "id_number": {"anchors": ["id", "no", "number", "pan", "aadhaar", "pnd", "acc", "card"], "critical": True, "weight": 0.4}
         }
         self.validation_patterns = {
             "pan": r"^[A-Z]{5}\d{4}[A-Z]{1}$",
@@ -29,7 +28,7 @@ class DocUnderstandingService:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.ml_model = None
         self.ml_processor = None
-        self.ml_weights_path = Path(__file__).resolve().parent.parent / "models" / "weights" / "layoutlmv3.pth"
+        self.ml_weights_path = Path(__file__).resolve().parent.parent / "models" / "weights" / "layoutlmv3_best copy.pth"
         
         # Shared LABELS
         self.LABELS = [
@@ -63,276 +62,273 @@ class DocUnderstandingService:
             logger.error(f"Failed to load LayoutLMv3 model: {e}")
             return False
 
-
     def extract(self, image_path: str, ocr_result: Dict[str, Any], doc_type: str) -> Dict[str, Any]:
         """
-        v3 Hybrid Extraction Pipeline: Rules -> LayoutLM Fallback -> Validation
+        Hybrid Document Understanding: LayoutLMv3 (Primary) -> Rules (Fallback) -> Validation
         """
         tokens = ocr_result.get("tokens", [])
-        if not tokens: return self._empty_result(doc_type)
+        if not tokens:
+            return self._empty_result(doc_type, ["NO_OCR_TOKENS"])
 
-        lines = self._align_tokens(tokens)
-        engine_path = "rules"
+        flags = []
+        engine_used = "LayoutLMv3"
+        start_time = datetime.now()
 
-        # 1. Path 1: Rule-based Fast Path
-        fields = self._extract_via_rules(lines, doc_type)
+        # 1. Primary: ML Inference
+        fields = self._run_layoutlm_extraction(image_path, tokens, doc_type)
         
-        # Calculate initial anchor confidence mean
-        avg_anchor_conf = np.mean([f["anchor_confidence"] for f in fields.values()]) if fields else 0.0
-        
-        # 2. Path 2: ML Fallback (LayoutLMv3 / DocLLM)
-        # Trigger if confidence low or critical fields missing
-        if avg_anchor_conf < 0.7 or self._is_critical_missing(fields):
-            logger.info("Triggering LayoutLM fallback due to low anchor confidence/missing fields.")
-            ml_fields = self._run_layoutlm_extraction(image_path, tokens, doc_type)
-
-            fields = self._merge_hybrid_results(fields, ml_fields)
-            engine_path = "layoutlm"
+        # 2. Fallback: Rules (if ML fails or fields missing)
+        if not fields or self._is_critical_missing(fields):
+            if not fields:
+                flags.append("LAYOUTLM_FAILED_OR_MISSING")
+            else:
+                flags.append("ML_INCOMPLETE_RESULTS")
+            
+            rule_fields = self._extract_via_rules(tokens, doc_type)
+            fields = self._merge_hybrid_results(fields or {}, rule_fields)
+            engine_used = "Hybrid_Fallback"
+            flags.append("DOC_MODEL_FALLBACK")
 
         # 3. Field Normalization
-        normalized = self._normalize_v3_fields(fields)
+        normalized = self._normalize_fields(fields)
         
-        # 4. Strict Validation Layer
-        validation_flags = self._perform_deep_validation(fields, normalized, doc_type)
+        # 4. Field-Level Validation
+        validation_results = self._validate_fields(normalized, doc_type)
+        flags.extend(validation_results["flags"])
         
-        # 5. Layout Score (v3 Formal)
-        layout_score = self._calculate_v3_layout_score(lines, fields)
+        # 5. Reliability Scoring
+        avg_field_conf = np.mean([f["confidence"] for f in fields.values()]) if fields else 0.0
         
-        # 6. Confidence Calibration (v3 Penalty System)
-        final_conf = self._calibrate_v3_confidence(fields, validation_flags, layout_score)
+        has_critical = not self._is_critical_missing(fields)
+        if not has_critical:
+            flags.append("MISSING_CRITICAL_FIELDS")
+
+        is_reliable = (
+            len(fields) >= 2 and 
+            has_critical and
+            avg_field_conf > 0.6 and 
+            not validation_results["critical_failure"] and
+            "DOCUMENT_UNRELIABLE" not in flags
+        )
+        
+        if not is_reliable:
+            flags.append("DOCUMENT_UNRELIABLE")
+
+        inference_time = (datetime.now() - start_time).total_seconds()
+        logger.info(f"Extraction complete. Engine: {engine_used}, Reliable: {is_reliable}, Time: {inference_time}s")
 
         return {
-            "document_type": doc_type,
+            "document_type": self._classify_doc_type(ocr_result, doc_type),
             "fields": fields,
             "normalized_fields": normalized,
-            "validation_flags": validation_flags,
-            "layout_score": round(layout_score, 4),
-            "confidence": round(final_conf, 4),
-            "engine_path": engine_path
+            "overall_confidence": round(float(avg_field_conf), 4),
+            "is_reliable": is_reliable,
+            "flags": flags,
+            "metadata": {
+                "engine": engine_used,
+                "inference_time": inference_time
+            }
         }
 
-    def _extract_via_rules(self, lines: List[List[Dict]], doc_type: str) -> Dict[str, Any]:
+    def _extract_via_rules(self, tokens: List[Dict], doc_type: str) -> Dict[str, Any]:
+        """
+        Robust Regex-based extraction fallback.
+        """
+        text = " ".join([t["text"] for t in tokens])
+        text_upper = text.upper()
         extracted = {}
-        for i, line in enumerate(lines):
-            line_text = " ".join([t["text"].lower() for t in line])
-            for field, cfg in self.config.items():
-                for anchor in cfg["anchors"]:
-                    if anchor in line_text:
-                        val, conf, bbox, tokens = self._find_value_v3(anchor, line, lines, i)
-                        if val:
-                            # Anchor confidence based on proximity and similarity
-                            a_conf = self._compute_anchor_confidence(anchor, line_text)
-                            if field not in extracted or (conf * a_conf) > (extracted[field]["confidence"] * extracted[field]["anchor_confidence"]):
-                                extracted[field] = {
-                                    "value": val,
-                                    "confidence": conf,
-                                    "anchor_confidence": a_conf,
-                                    "source_bbox": bbox,
-                                    "source_tokens": tokens,
-                                    "line_idx": i
-                                }
+
+        # 1. ID Number (PAN / Aadhaar)
+        pan_match = re.search(r'[A-Z]{5}[0-9]{4}[A-Z]{1}', text_upper)
+        aadhaar_match = re.search(r'\d{4}\s\d{4}\s\d{4}|\d{12}', text)
+        
+        if pan_match:
+            extracted["id_number"] = self._format_rule_field(pan_match.group(), 0.85, tokens)
+        elif aadhaar_match:
+            extracted["id_number"] = self._format_rule_field(aadhaar_match.group(), 0.85, tokens)
+
+        # 2. DOB
+        dob_match = re.search(r'\d{2}[/-]\d{2}[/-]\d{4}', text)
+        if dob_match:
+            extracted["dob"] = self._format_rule_field(dob_match.group(), 0.80, tokens)
+
+        # 3. Name (Heuristic)
+        name_anchors = ["NAME", "नाम", "FATHER", "HUSBAND"]
+        for anchor in name_anchors:
+            if anchor in text_upper:
+                parts = text_upper.split(anchor)
+                if len(parts) > 1:
+                    candidate = parts[1].strip(": ").strip()
+                    # Split by common next-field anchors to avoid over-capturing
+                    stop_words = ["DATE", "DOB", "ID", "NO", "ADDRESS", "FATHER", "नाम", "HUSBAND"]
+                    for stop in stop_words:
+                        if stop in candidate:
+                            candidate = candidate.split(stop)[0].strip()
+                    
+                    # Cleanup non-alpha noise at start/end
+                    candidate = re.sub(r'^[^A-Z]+|[^A-Z]+$', '', candidate)
+                    
+                    if len(candidate) > 2:
+                        extracted["name"] = self._format_rule_field(candidate, 0.75, tokens)
+                        break
+
         return extracted
 
-    def _compute_anchor_confidence(self, anchor: str, text: str) -> float:
-        # Simplified: Higher if anchor is at the start of the line
-        return 0.95 if text.startswith(anchor) else 0.80
-
-    def _find_value_v3(self, anchor: str, current_line: List[Dict], all_lines: List[List[Dict]], idx: int) -> Tuple:
-        # Returns (value, confidence, bbox, tokens)
-        line_text = " ".join([t["text"] for t in current_line])
-        parts = re.split(re.escape(anchor), line_text, flags=re.IGNORECASE)
-        if len(parts) > 1 and parts[1].strip():
-            val = parts[1].strip(": ").strip()
-            # Find tokens corresponding to the value
-            val_tokens = [t["text"] for t in current_line if t["text"] in val]
-            bbox = current_line[-1]["bbox"] # Simplified
-            return val, 0.92, bbox, val_tokens
-        return None, 0.0, [], []
-
-    def _merge_hybrid_results(self, rule_fields: Dict, ml_fields: Dict) -> Dict:
-        merged = rule_fields.copy()
-        for k, v in ml_fields.items():
-            if k not in merged or v["confidence"] > merged[k]["confidence"]:
-                merged[k] = v
-        return merged
-
-    def _perform_deep_validation(self, fields: Dict, normalized: Dict, doc_type: str) -> Dict[str, bool]:
-        flags = {
-            "invalid_id_format": False,
-            "dob_invalid": False,
-            "script_mismatch": False,
-            "missing_critical_fields": self._is_critical_missing(fields),
-            "cross_field_inconsistency": False
+    def _format_rule_field(self, value: str, conf: float, tokens: List[Dict]) -> Dict:
+        return {
+            "value": value,
+            "confidence": conf,
+            "bbox": [0,0,0,0] # Rule-based bbox is hard to pinpoint without complex alignment
         }
-        
-        # ID Validation
-        if "id_number" in normalized:
-            val = normalized["id_number"]
-            if not (re.match(self.validation_patterns["pan"], val) or re.match(self.validation_patterns["aadhaar"], val)):
-                flags["invalid_id_format"] = True
-                
-        # DOB Validation
-        if "dob" in normalized:
-            if not re.match(self.validation_patterns["dob"], normalized["dob"]):
-                flags["dob_invalid"] = True
-        
-        # Consistency: If ID present but Name missing
-        if "id_number" in fields and "name" not in fields:
-            flags["cross_field_inconsistency"] = True
-            
-        return flags
 
-    def _calibrate_v3_confidence(self, fields: Dict, flags: Dict, layout_score: float) -> float:
-        if not fields: return 0.0
-        
-        # Weighted base confidence
-        base = sum(fields[f]["confidence"] * self.config[f]["weight"] for f in fields)
-        
-        # Apply penalties
-        penalty = 0.0
-        if flags["invalid_id_format"]: penalty += 0.3
-        if flags["missing_critical_fields"]: penalty += 0.2
-        if flags["cross_field_inconsistency"]: penalty += 0.15
-        
-        conf = (base * 0.8 + layout_score * 0.2) - penalty
-        return max(0.0, min(conf, 0.98))
-
-    def _calculate_v3_layout_score(self, lines: List[List[Dict]], fields: Dict) -> float:
-        alignment = 1.0 - min(len(lines) / 40.0, 0.4)
-        coverage = len(fields) / len(self.config)
-        return (alignment * 0.5) + (coverage * 0.5)
-
-    def _is_critical_missing(self, fields: Dict) -> bool:
-        for f, cfg in self.config.items():
-            if cfg["critical"] and f not in fields:
-                return True
-        return False
-
-    def _normalize_v3_fields(self, fields: Dict) -> Dict:
-        norm = {}
-        for f, d in fields.items():
-            val = d["value"]
-            if f == "dob":
-                # Mock normalization to ISO
-                norm[f] = "1990-01-01" if "1990" in val else val
+    def _normalize_fields(self, fields: Dict) -> Dict:
+        normalized = {}
+        for k, v in fields.items():
+            val = v["value"].strip()
+            if k == "dob":
+                # Normalize DD/MM/YYYY to YYYY-MM-DD
+                for fmt in ["%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y"]:
+                    try:
+                        normalized[k] = datetime.strptime(val, fmt).strftime("%Y-%m-%d")
+                        break
+                    except: continue
+                if k not in normalized: normalized[k] = val # fallback
+            elif k == "name":
+                normalized[k] = val.upper()
             else:
-                norm[f] = val.upper().strip()
-        return norm
+                normalized[k] = val.replace(" ", "").upper()
+        return normalized
+
+    def _validate_fields(self, normalized: Dict, doc_type: str) -> Dict:
+        flags = []
+        critical_failure = False
+
+        # 1. Name Validation
+        if "name" in normalized:
+            name = normalized["name"]
+            if len(name) < 3 or any(c.isdigit() for c in name):
+                flags.append("INVALID_NAME")
+        
+        # 2. DOB Validation
+        if "dob" in normalized:
+            dob_val = normalized["dob"]
+            try:
+                dob_dt = datetime.strptime(dob_val, "%Y-%m-%d")
+                age = (datetime.now() - dob_dt).days / 365.25
+                if age < 18 or age > 110:
+                    flags.append("INVALID_DOB_RANGE")
+                    critical_failure = True
+            except:
+                flags.append("INVALID_DOB_FORMAT")
+
+        # 3. ID Validation
+        if "id_number" in normalized:
+            id_val = normalized["id_number"]
+            is_pan = bool(re.match(r'^[A-Z]{5}\d{4}[A-Z]{1}$', id_val))
+            is_aadhaar = bool(re.match(r'^\d{12}$', id_val))
+            if not (is_pan or is_aadhaar):
+                flags.append("INVALID_ID_PATTERN")
+                critical_failure = True
+
+        return {"flags": flags, "critical_failure": critical_failure}
+
+    def _classify_doc_type(self, ocr_result: Dict, provided_type: str) -> str:
+        text = ocr_result.get("text", "").upper()
+        if "PAN CARD" in text or "INCOME TAX" in text: return "PAN"
+        if "AADHAAR" in text or "UNIQUE IDENTIFICATION" in text: return "AADHAAR"
+        return provided_type or "UNKNOWN"
 
     def _run_layoutlm_extraction(self, image_path: str, tokens: List[Dict], doc_type: str) -> Dict:
         if not self._load_ml_model():
-            return {} # fallback to empty if model fails to load
+            return {}
 
         try:
             image = Image.open(image_path).convert("RGB")
             width, height = image.size
             
-            words = []
+            words = [t["text"] for t in tokens]
             boxes = []
-            
             for t in tokens:
-                words.append(t["text"])
-                # Normalize box
                 x1, y1, x2, y2 = t["bbox"]
-                x1 = max(0, min(1000, int(1000 * (x1 / width))))
-                x2 = max(0, min(1000, int(1000 * (x2 / width))))
-                y1 = max(0, min(1000, int(1000 * (y1 / height))))
-                y2 = max(0, min(1000, int(1000 * (y2 / height))))
-                if x2 <= x1: x2 = x1 + 1
-                if y2 <= y1: y2 = y1 + 1
-                boxes.append([x1, y1, x2, y2])
+                # Normalize to 0-1000
+                boxes.append([
+                    max(0, min(1000, int(1000 * x1 / width))),
+                    max(0, min(1000, int(1000 * y1 / height))),
+                    max(0, min(1000, int(1000 * x2 / width))),
+                    max(0, min(1000, int(1000 * y2 / height)))
+                ])
 
             encoding = self.ml_processor(
-                image,
-                words,
-                boxes=boxes,
-                truncation=True,
-                max_length=512,
-                padding="max_length",
-                return_tensors="pt"
+                image, words, boxes=boxes, 
+                truncation=True, padding="max_length", return_tensors="pt"
             ).to(self.device)
 
             with torch.no_grad():
                 outputs = self.ml_model(**encoding)
                 predictions = outputs.logits.argmax(-1).squeeze().cpu().tolist()
 
-            # Align predictions back to word-level using word_ids
             word_ids = encoding.word_ids()
+            extracted = {}
             
-            extracted_entities = {}
-            current_entity = []
-            current_label = None
+            mapping = {"NAME": "name", "DOB": "dob", "ID_NUM": "id_number"}
             
             for idx, word_id in enumerate(word_ids):
-                if word_id is None:
-                    continue
-                    
-                pred_label = self.ID2LABEL[predictions[idx]]
-                
-                if pred_label != "O":
-                    tag, entity_type = pred_label.split("-", 1)
-                    if tag == "B":
-                        if current_entity:
-                            self._store_entity(extracted_entities, current_label, current_entity)
-                        current_entity = [tokens[word_id]]
-                        current_label = entity_type
-                    elif tag == "I" and current_label == entity_type:
-                        # Avoid duplicates from subword tokens mapping to same word_id
-                        if tokens[word_id] not in current_entity:
-                            current_entity.append(tokens[word_id])
-                else:
-                    if current_entity:
-                        self._store_entity(extracted_entities, current_label, current_entity)
-                        current_entity = []
-                        current_label = None
-
-            if current_entity:
-                self._store_entity(extracted_entities, current_label, current_entity)
-
-            # Map LAYOUTLM labels to DocUnderstandingService field names
-            # LABELS: NAME, DOB, ID_NUM
-            field_mapping = {
-                "NAME": "name",
-                "DOB": "dob",
-                "ID_NUM": "id_number"
-            }
+                if word_id is None: continue
+                label = self.ID2LABEL[predictions[idx]]
+                if label != "O":
+                    _, entity = label.split("-")
+                    field = mapping.get(entity)
+                    if field:
+                        if field not in extracted:
+                            extracted[field] = {"value": "", "confidence": 0.0, "tokens": []}
+                        if tokens[word_id] not in extracted[field]["tokens"]:
+                            extracted[field]["tokens"].append(tokens[word_id])
             
-            ml_fields = {}
-            for k, v_list in extracted_entities.items():
-                if k in field_mapping:
-                    field = field_mapping[k]
-                    # Get highest confidence entity if multiple found
-                    best_entity = max(v_list, key=lambda x: x["confidence"])
-                    ml_fields[field] = best_entity
-
-            return ml_fields
+            # Post-process extracted clusters
+            final_ml = {}
+            for field, data in extracted.items():
+                sorted_toks = sorted(data["tokens"], key=lambda x: (x["bbox"][1], x["bbox"][0]))
+                val = " ".join([t["text"] for t in sorted_toks])
+                conf = np.mean([t.get("confidence", 0.9) for t in sorted_toks])
+                
+                # Bbox union
+                min_x = min(t["bbox"][0] for t in sorted_toks)
+                min_y = min(t["bbox"][1] for t in sorted_toks)
+                max_x = max(t["bbox"][2] for t in sorted_toks)
+                max_y = max(t["bbox"][3] for t in sorted_toks)
+                
+                final_ml[field] = {
+                    "value": val,
+                    "confidence": round(float(conf), 4),
+                    "bbox": [min_x, min_y, max_x, max_y]
+                }
+            return final_ml
 
         except Exception as e:
-            logger.error(f"LayoutLM extraction failed: {e}")
+            logger.error(f"LayoutLM Inference failed: {e}")
             return {}
 
-    def _store_entity(self, extracted: Dict, label: str, entity_tokens: List[Dict]):
-        if label not in extracted:
-            extracted[label] = []
-            
-        full_text = " ".join([t["text"] for t in entity_tokens])
-        # Simple bounding box union
-        min_x = min(t["bbox"][0] for t in entity_tokens)
-        min_y = min(t["bbox"][1] for t in entity_tokens)
-        max_x = max(t["bbox"][2] for t in entity_tokens)
-        max_y = max(t["bbox"][3] for t in entity_tokens)
-        
-        extracted[label].append({
-            "value": full_text,
-            "confidence": 0.88, # Defaulting ML confidence since LayoutLM lacks robust probability per field currently
-            "anchor_confidence": 0.5, # ML predictions have low anchor confidence to still prioritize rules if available
-            "source_bbox": [min_x, min_y, max_x, max_y],
-            "source_tokens": entity_tokens
-        })
+    def _merge_hybrid_results(self, ml: Dict, rules: Dict) -> Dict:
+        merged = ml.copy()
+        for k, v in rules.items():
+            if k not in merged or (v["confidence"] > merged[k]["confidence"]):
+                merged[k] = v
+        return merged
 
+    def _is_critical_missing(self, fields: Dict) -> bool:
+        return "name" not in fields or "id_number" not in fields
+
+    def _empty_result(self, doc_type: str, flags: List[str] = None) -> Dict:
+        return {
+            "document_type": doc_type,
+            "fields": {},
+            "normalized_fields": {},
+            "overall_confidence": 0.0,
+            "is_reliable": False,
+            "flags": flags or ["EMPTY_EXTRACTION"]
+        }
 
     def _align_tokens(self, tokens: List[Dict]) -> List[List[Dict]]:
-        # Same as v2
         sorted_tokens = sorted(tokens, key=lambda t: t["bbox"][1])
         if not sorted_tokens: return []
         lines = []
@@ -345,6 +341,3 @@ class DocUnderstandingService:
                 curr_line = [sorted_tokens[i]]
         lines.append(sorted(curr_line, key=lambda t: t["bbox"][0]))
         return lines
-
-    def _empty_result(self, doc_type: str) -> Dict:
-        return {"document_type": doc_type, "fields": {}, "confidence": 0.0, "engine_path": "none"}
